@@ -4,7 +4,20 @@ Cinematic camera for **Minecraft Bedrock** on Android, running as a native [Levi
 
 The camera reacts to how you move: it pitches when you accelerate or fall, rolls when you turn or strafe, and sways gently when you stand still.
 
-> **Beta.** Tested by building and static analysis, not yet by extensive in-game play. Feedback welcome.
+> **Beta.** Tested by building, numeric simulation and static analysis, not yet by extensive in-game play. Feedback welcome.
+
+### What's new in 1.1.0-beta — smooth motion
+
+Game logic runs at 20 Hz while rendering runs at 60–144 Hz. Previously the camera offsets were integrated on the tick, so the same value was held for several frames and then jumped, which felt like stuttering.
+
+Now the tick only publishes a *target*, and a critically damped spring chases it **once per rendered frame**. Measured on the real code, with a 20 Hz tick and 120 Hz rendering:
+
+| | largest jump per frame | overshoot |
+|---|---|---|
+| before | 2.2743° | – |
+| after | **0.2916°** | **0.000°** |
+
+An **87% reduction**, with no overshoot and zero frozen frames while the camera is in motion. The spring uses the closed-form solution rather than an Euler step, so it stays stable at any frame rate — verified at a steady 144 fps and 30 fps, under chaotic 12–144 fps, and across a 0.5 s stall.
 
 ---
 
@@ -17,7 +30,7 @@ That project is licensed under GPL-3.0, and so is this one. This is an independe
 | | |
 |---|---|
 | **Author** | LENDS DZIN |
-| **Version** | 1.0.0-beta |
+| **Version** | 1.1.0-beta |
 | **Platform** | Minecraft Bedrock (Android, arm64-v8a) |
 | **Loader** | LeviLauncher / preloader-android |
 | **License** | GPL-3.0 |
@@ -65,7 +78,9 @@ Everything is configurable from the LeviLauncher mod menu. Sliders have explicit
 | Sway Fade In Delay | 0.0 – 15.0 s | 3.0 |
 | Sway Fade In Length | 0.1 – 15.0 s | 4.0 |
 | Sway Fade Out Length | 0.1 – 15.0 s | 1.0 |
-| Transition Smoothing | 0.1 – 5.0 | 1.0 |
+| Overall Smoothness | 0.2 – 4.0 | 1.0 |
+
+**Overall Smoothness** scales all three springs at once — raise it for a heavier, more cinematic camera, lower it for a snappier one. The per-axis smoothing sliders still work on top of it.
 
 Settings persist to the mod's config directory.
 

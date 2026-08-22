@@ -105,8 +105,8 @@ void registerWithLauncher() {
     builder.config("swayFadeOutLength", "Sway Fade Out Length", ConfigType::SliderFloat,
                    f(mod.m_swayFadeOutLength), "0.1", "15.0", "enableSway");
 
-    builder.config("transitionSmoothing", "Transition Smoothing", ConfigType::SliderFloat,
-                   f(mod.m_transitionSmoothing), "0.1", "5.0");
+    builder.config("transitionSmoothing", "Overall Smoothness", ConfigType::SliderFloat,
+                   f(mod.m_transitionSmoothing), "0.2", "4.0");
 
     (void)builder.registerModule();
 }
