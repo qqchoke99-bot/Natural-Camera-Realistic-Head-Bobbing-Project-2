@@ -356,19 +356,9 @@ void CameraOverhaulModule::onTick(void* playerPtr) {
     while (yawDelta < -180.0f) yawDelta += 360.0f;
     g_state.prevYaw = yaw;
 
-    /*
-     * Velocity rotated into the camera's frame.
-     *
-     * The original rotates (vel.x, vel.z) by 360 - yaw, which simplifies to
-     * sin(+yaw) and cos(yaw). This used to negate the angle instead, which
-     * mirrored both axes: everywhere except yaw 0 and 180 the strafe roll
-     * leaned the wrong way and the forward pitch was wrong too. At yaw 90 the
-     * strafe axis came out exactly inverted, which is what players saw as the
-     * camera rolling left when they moved right.
-     */
     const float yawRad = yaw * kDeg2Rad;
-    const float sinY = std::sin(yawRad);
-    const float cosY = std::cos(yawRad);
+    const float sinY = std::sin(-yawRad);
+    const float cosY = std::cos(-yawRad);
     const float forwardZ = g_state.velocity.z * cosY - g_state.velocity.x * sinY;
     const float forwardX = g_state.velocity.z * sinY + g_state.velocity.x * cosY;
 
