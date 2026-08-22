@@ -59,8 +59,8 @@ std::string f(float value) {
 void registerWithLauncher() {
     auto& mod = CameraOverhaulModule::get();
 
-    pl::modmenu::ModuleBuilder builder(std::string(CameraOverhaulModule::moduleId),
-                                       std::string(CameraOverhaulModule::name));
+    pl::modmenu::ModuleBuilder builder{std::string(CameraOverhaulModule::moduleId),
+                                       std::string(CameraOverhaulModule::name)};
 
     builder.description("Cinematic camera: movement pitch, turning roll and idle sway")
            .defaultEnabled(mod.enabled())
