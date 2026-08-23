@@ -62,8 +62,9 @@ float clampf(float v, float lo, float hi) {
 }
 
 float dampStep(float smoothing, float dt) {
-    if (smoothing <= 0.001f) return 1.0f;
-    return 1.0f - std::exp(-(16.0f / smoothing) * dt);
+    if (smoothing <= 0.0001f) return 1.0f;
+    float s2 = smoothing * smoothing;
+    return 1.0f - std::pow(s2, dt);
 }
 
 float easeInOutCubic(float t) {
@@ -356,25 +357,44 @@ void CameraOverhaulModule::onTick(void* playerPtr) {
     while (yawDelta < -180.0f) yawDelta += 360.0f;
     g_state.prevYaw = yaw;
 
+    /*
+     * Relative Velocity Transformation:
+     * Rotates world velocity vector (vx, vz) into player's local frame.
+     * forwardX: strafe speed (negative for right strafe, positive for left strafe)
+     * forwardZ: forward speed (positive for forward motion, negative for backward)
+     */
     const float yawRad = yaw * kDeg2Rad;
-    const float sinY = std::sin(-yawRad);
-    const float cosY = std::cos(-yawRad);
-    const float forwardZ = g_state.velocity.z * cosY - g_state.velocity.x * sinY;
-    const float forwardX = g_state.velocity.z * sinY + g_state.velocity.x * cosY;
+    const float sinY = std::sin(yawRad);
+    const float cosY = std::cos(yawRad);
+    const float forwardX = g_state.velocity.x * cosY + g_state.velocity.z * sinY;
+    const float forwardZ = -g_state.velocity.x * sinY + g_state.velocity.z * cosY;
 
     const float accumulation = 0.0048f * m_turningRollAccumulation;
     const float intensity = 1.25f * m_turningRollIntensity;
-    const float smoothing = 0.0825f * m_turningRollSmoothing;
+    const float decaySmoothing = 0.0825f * m_turningRollSmoothing;
 
     const float pitchScale = std::cos(pitch * kDeg2Rad);
     g_state.rollAccumulator = clampf(
         g_state.rollAccumulator + yawDelta * accumulation * pitchScale, -1.0f, 1.0f);
-    g_state.rollAccumulator -= g_state.rollAccumulator * dampStep(smoothing * 100.0f, dt);
+    g_state.rollAccumulator -= g_state.rollAccumulator * dampStep(decaySmoothing, dt);
 
     const float rollFromTurning =
         clampf(easeInOutCubic(std::fabs(g_state.rollAccumulator)), 0.0f, 1.0f)
         * intensity * signf(g_state.rollAccumulator);
-    const float rollFromStrafing = -forwardX * m_strafingRollIntensity;
+
+    /*
+     * Joystick Deadzone for Strafing:
+     * When walking forward with a joystick / touch stick, slight thumb imperfections
+     * naturally create tiny lateral velocity drifts. Applying a deadzone prevents
+     * unintended camera tilting during straight movement.
+     */
+    constexpr float kStrafeDeadzone = 0.25f;
+    const float strafeSpeed = std::fabs(forwardX);
+    float effectiveStrafe = 0.0f;
+    if (strafeSpeed > kStrafeDeadzone) {
+        effectiveStrafe = (strafeSpeed - kStrafeDeadzone) * signf(forwardX);
+    }
+    const float rollFromStrafing = -effectiveStrafe * m_strafingRollIntensity;
 
     /*
      * The tick only publishes targets. The springs that chase them are advanced
