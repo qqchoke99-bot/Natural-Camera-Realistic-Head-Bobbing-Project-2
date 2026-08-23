@@ -387,6 +387,12 @@ void CameraOverhaulModule::onTick(void* playerPtr) {
      * When walking forward with a joystick / touch stick, slight thumb imperfections
      * naturally create tiny lateral velocity drifts. Applying a deadzone prevents
      * unintended camera tilting during straight movement.
+     *
+     * In view space, negative roll rotates the view to the right (right side down),
+     * and positive roll rotates the view to the left (left side down).
+     * Since forwardX is negative when strafing right, effectiveStrafe * intensity
+     * produces negative roll (tilting right) when strafing right, and positive roll
+     * (tilting left) when strafing left.
      */
     constexpr float kStrafeDeadzone = 0.25f;
     const float strafeSpeed = std::fabs(forwardX);
@@ -394,7 +400,7 @@ void CameraOverhaulModule::onTick(void* playerPtr) {
     if (strafeSpeed > kStrafeDeadzone) {
         effectiveStrafe = (strafeSpeed - kStrafeDeadzone) * signf(forwardX);
     }
-    const float rollFromStrafing = -effectiveStrafe * m_strafingRollIntensity;
+    const float rollFromStrafing = effectiveStrafe * m_strafingRollIntensity;
 
     /*
      * The tick only publishes targets. The springs that chase them are advanced
