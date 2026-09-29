@@ -10,7 +10,7 @@ Copie o bloco abaixo e cole direto no Discord. A formatação já está pronta.
 
 > Sua câmera para de ser um bloco de gelo. Ela **inclina** quando você acelera, **rola** quando você faz a curva e **respira** quando você fica parado.
 
-**Autor:** `LENDS DZIN`
+**Autor:** `DrukisMC`
 **Plataforma:** Minecraft Bedrock (Android · arm64)
 **Loader:** LeviLauncher
 **Licença:** GPL-3.0

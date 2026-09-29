@@ -10,7 +10,7 @@ Copy the block below and paste it straight into Discord. Formatting is ready to 
 
 > Your camera stops being a static block. It **tilts** when you accelerate, **rolls** when you turn, and **breathes** when you stand still.
 
-**Author:** `LENDS DZIN`
+**Author:** `DrukisMC`
 **Platform:** Minecraft Bedrock (Android · arm64)
 **Loader:** LeviLauncher
 **License:** GPL-3.0
