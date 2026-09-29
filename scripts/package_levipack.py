@@ -9,7 +9,6 @@ VALUE_PATTERN = re.compile(r'^\s*inline\s+constexpr\s+std::string_view\s+(Name|A
 REQUIRED_VALUES = ("Name", "Author", "Description", "Version")
 LIBRARY_NAME = "libCameraOverhaul.so"
 
-
 def parse_version(path: Path) -> dict:
     values = {}
     for line in path.read_text(encoding="utf-8").splitlines():
@@ -20,7 +19,6 @@ def parse_version(path: Path) -> dict:
     if missing:
         raise ValueError("Missing version metadata: " + ", ".join(missing))
     return values
-
 
 def build_manifest(values: dict) -> dict:
     return {
@@ -34,7 +32,6 @@ def build_manifest(values: dict) -> dict:
         "overwrite_files": ["icon.png"],
         "overwrite_folders": [],
     }
-
 
 def write_package(library: Path, icon: Path, version_header: Path, output: Path) -> None:
     if not library.is_file():
@@ -68,7 +65,6 @@ def write_package(library: Path, icon: Path, version_header: Path, output: Path)
         if archive.getinfo("icon.png").file_size != icon.stat().st_size:
             raise RuntimeError("Icon verification failed")
 
-
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--library", required=True, type=Path)
@@ -83,7 +79,6 @@ def main() -> int:
         return 1
     print(args.output.resolve())
     return 0
-
 
 if __name__ == "__main__":
     raise SystemExit(main())

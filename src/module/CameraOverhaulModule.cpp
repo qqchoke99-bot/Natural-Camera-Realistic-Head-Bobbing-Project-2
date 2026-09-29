@@ -1,13 +1,4 @@
-/*
- * CameraOverhaul for Minecraft Bedrock (LeviLauncher).
- *
- * Inspired by and derived from the camera math of "CameraOverhaul" by
- * Mirsario & Contributors, a Java Edition mod:
- *   https://www.curseforge.com/minecraft/mc-mods/cameraoverhaul
- *   https://github.com/Mirsario/Minecraft-CameraOverhaul
- *
- * That project is licensed under GPL-3.0, and so is this one.
- */
+
 
 #include "CameraOverhaulModule.hpp"
 
@@ -26,31 +17,12 @@ namespace {
 constexpr float kPi = 3.14159265358979323846f;
 constexpr float kDeg2Rad = kPi / 180.0f;
 
-/*
- * Velocity here is in blocks per second, so the Java factors cannot be reused
- * directly. These gains were chosen so the effect reads clearly without
- * causing motion sickness:
- *   forward  0.45 -> about 2.5 deg sprinting, about 13 deg in an elytra dive
- *   vertical 0.30 -> about 6 deg at terminal fall velocity
- */
 constexpr float kForwardPitchGain = 0.45f;
 constexpr float kVerticalPitchGain = 0.30f;
 
-/*
- * Spring half-life at a smoothing setting of 1.0, in seconds: the time for the
- * remaining distance to halve. Roll is given a slightly longer half-life than
- * pitch because banking reads as heavier than tipping, which is how a real head
- * behaves. Measured against a 20 Hz tick and 120 Hz rendering, these cut the
- * largest per-frame jump from 2.05 deg to 0.26 deg with no overshoot.
- */
 constexpr float kPitchHalfLife = 0.060f;
 constexpr float kRollHalfLife = 0.075f;
 
-/*
- * The camera transform written by CameraBlendSystem::_tick:
- *   +0x28  quaternion (x, y, z, w)
- *   +0x38  Vec3 position
- */
 constexpr std::uintptr_t kRotationOffset = 0x28;
 
 struct Quat {
@@ -75,12 +47,6 @@ float easeInOutCubic(float t) {
 
 float signf(float v) { return v < 0.0f ? -1.0f : 1.0f; }
 
-/*
- * The bias is applied by post-multiplying the engine quaternion with a small
- * local rotation. This never converts to Euler angles, so it cannot hit gimbal
- * lock at the poles and does not depend on the engine's Euler convention,
- * which is not observable from the disassembly.
- */
 Quat quatMul(const Quat& a, const Quat& b) {
     return Quat{
         a.w * b.x + a.x * b.w + a.y * b.z - a.z * b.y,
@@ -102,11 +68,6 @@ Quat quatNormalize(const Quat& q) {
     return Quat{q.x / n, q.y / n, q.z / n, q.w / n};
 }
 
-/*
- * Deterministic value noise used for the idle sway. SimplexNoise in the
- * original is only sampled along one axis per channel, so smoothed 1D gradient
- * noise is perceptually equivalent here.
- */
 float hashNoise(int i, int seed) {
     std::uint32_t h = static_cast<std::uint32_t>(i) * 374761393u
                     + static_cast<std::uint32_t>(seed) * 668265263u;
@@ -130,18 +91,6 @@ double nowSeconds() {
     return duration<double>(steady_clock::now().time_since_epoch()).count();
 }
 
-/*
- * Critically damped spring, closed form.
- *
- * The game logic runs at 20 Hz while rendering runs at 60-144 Hz, so a value
- * integrated on the tick is held constant for several frames and then jumps.
- * That stepping is what reads as stuttering. The tick therefore only sets a
- * target, and this spring integrates towards it once per rendered frame.
- *
- * This is the exact solution rather than an Euler step, so it stays stable for
- * any dt: a frame spike or a long stall cannot make it overshoot or explode,
- * which a naive lerp does once its factor saturates at 1.
- */
 struct Spring {
     float value = 0.0f;
     float velocity = 0.0f;
@@ -247,10 +196,6 @@ void CameraOverhaulModule::applyToCamera(void* cameraComponent) {
                                 quat->z * quat->z + quat->w * quat->w);
     if (!(len > 0.5f && len < 1.5f)) return;
 
-    /*
-     * Advance the springs on the render clock, not the tick clock. This is what
-     * turns the 20 Hz staircase into continuous motion.
-     */
     const double now = nowSeconds();
     float frameDt = 1.0f / 60.0f;
     if (g_state.lastFrameTime > 0.0) {
@@ -357,12 +302,6 @@ void CameraOverhaulModule::onTick(void* playerPtr) {
     while (yawDelta < -180.0f) yawDelta += 360.0f;
     g_state.prevYaw = yaw;
 
-    /*
-     * Relative Velocity Transformation:
-     * Rotates world velocity vector (vx, vz) into player's local frame.
-     * forwardX: strafe speed (negative for right strafe, positive for left strafe)
-     * forwardZ: forward speed (positive for forward motion, negative for backward)
-     */
     const float yawRad = yaw * kDeg2Rad;
     const float sinY = std::sin(yawRad);
     const float cosY = std::cos(yawRad);
@@ -382,18 +321,6 @@ void CameraOverhaulModule::onTick(void* playerPtr) {
         clampf(easeInOutCubic(std::fabs(g_state.rollAccumulator)), 0.0f, 1.0f)
         * intensity * signf(g_state.rollAccumulator);
 
-    /*
-     * Joystick Deadzone for Strafing:
-     * When walking forward with a joystick / touch stick, slight thumb imperfections
-     * naturally create tiny lateral velocity drifts. Applying a deadzone prevents
-     * unintended camera tilting during straight movement.
-     *
-     * In view space, negative roll rotates the view to the right (right side down),
-     * and positive roll rotates the view to the left (left side down).
-     * Since forwardX is negative when strafing right, effectiveStrafe * intensity
-     * produces negative roll (tilting right) when strafing right, and positive roll
-     * (tilting left) when strafing left.
-     */
     constexpr float kStrafeDeadzone = 0.25f;
     const float strafeSpeed = std::fabs(forwardX);
     float effectiveStrafe = 0.0f;
@@ -402,11 +329,6 @@ void CameraOverhaulModule::onTick(void* playerPtr) {
     }
     const float rollFromStrafing = effectiveStrafe * m_strafingRollIntensity;
 
-    /*
-     * The tick only publishes targets. The springs that chase them are advanced
-     * per rendered frame in applyToCamera, so motion stays continuous no matter
-     * how far apart the ticks are.
-     */
     g_state.targetRoll = rollFromTurning + rollFromStrafing;
 
     float verticalTarget = g_state.velocity.y;
