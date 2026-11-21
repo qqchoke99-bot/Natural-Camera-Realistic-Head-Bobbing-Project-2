@@ -56,9 +56,17 @@ jobs:
           '
           exit 1
 
+      - name: Locate package
+        if: steps.build.outcome == 'success'
+        run: |
+          echo "--- levipack / so files ---"
+          find . -name "*.levipack" -o -name "libRealisticHeadBob.so" | head -20
+          echo "--- build tree ---"
+          ls -la headbob/build 2>/dev/null || true
+
       - uses: actions/upload-artifact@v4
         if: steps.build.outcome == 'success'
         with:
           name: RealisticHeadBob-1.26.62
-          path: headbob/build/android/arm64-v8a/release/RealisticHeadBob.levipack
+          path: headbob/**/*.levipack
           if-no-files-found: error
