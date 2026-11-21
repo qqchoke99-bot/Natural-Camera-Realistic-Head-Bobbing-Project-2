@@ -78,10 +78,12 @@ add_custom_target(levi_package
             ${CMAKE_CURRENT_SOURCE_DIR}/config/config.json
             ${CMAKE_CURRENT_SOURCE_DIR}/config/config.schema.json
             ${CMAKE_BINARY_DIR}/package/${MOD_ID}/config/
+    # cmake -E tar has no -C: archive from the package dir so paths stay
+    # realistic_headbob/... instead of package/realistic_headbob/...
     COMMAND ${CMAKE_COMMAND} -E tar cf ${CMAKE_BINARY_DIR}/${MOD_ID}-${MCVER}.levipack
             --format=zip
-            -C ${CMAKE_BINARY_DIR}/package
             ${MOD_ID}
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/package
     DEPENDS ${MOD_LIBRARY_NAME}
     COMMENT "Packaging ${MOD_ID}-${MCVER}.levipack"
 )
