@@ -230,6 +230,7 @@ void RealisticHeadBobMod::tickDetour(void* actor) {
 
 void RealisticHeadBobMod::onActorTick(void* actor) {
     if (!actor) return;
+    mTicks.fetch_add(1, std::memory_order_relaxed);
 
     const auto& layout = headbob::profile::layout();
     const auto* base = static_cast<const std::uint8_t*>(actor);
@@ -240,13 +241,17 @@ void RealisticHeadBobMod::onActorTick(void* actor) {
     std::memcpy(&rotationComponent, base + layout.actorRotationComponent, sizeof(rotationComponent));
 
     // Never follow a pointer that a moved structure offset might have produced.
-    if (!headbob::memory::readable(stateVector, sizeof(headbob::memory::Vec3)) ||
+    if (!headbob::memory::readable(stateVector, sizeof(headbob::memory::Vec3) + 0x18) ||
         !headbob::memory::readable(rotationComponent, sizeof(headbob::memory::Vec2))) {
         mHasSample.store(false, std::memory_order_relaxed);
         return;
     }
 
+    // ActorStateVectorComponent { Vec3 mPos; Vec3 mPosPrev; Vec3 mPosDelta; }
+    // The engine already computed how far the actor moved this tick - that is
+    // the real velocity, and it does not depend on our clock.
     const headbob::memory::Vec3 pos = headbob::memory::field<headbob::memory::Vec3>(stateVector, 0);
+    const headbob::memory::Vec3 delta = headbob::memory::field<headbob::memory::Vec3>(stateVector, 0x18);
     const headbob::memory::Vec2 rot = headbob::memory::field<headbob::memory::Vec2>(rotationComponent, 0);
     if (!plausiblePosition(pos) || !std::isfinite(rot.x) || !std::isfinite(rot.y)) {
         mHasSample.store(false, std::memory_order_relaxed);
@@ -259,20 +264,53 @@ void RealisticHeadBobMod::onActorTick(void* actor) {
     mLastTickTime = now;
     dt = clampf(dt, 0.001f, 0.25f);
 
-    if (!mHasLastPos) {
-        mLastPos = pos;
-        mHasLastPos = true;
+    float posSpeed = 0.f;
+    float posVy = 0.f;
+    if (mHasLastPos) {
+        posSpeed = std::sqrt((pos.x - mLastPos.x) * (pos.x - mLastPos.x) +
+                             (pos.z - mLastPos.z) * (pos.z - mLastPos.z)) / dt;
+        posVy = (pos.y - mLastPos.y) / dt;
+    }
+    mLastPos = pos;
+    mHasLastPos = true;
+
+    // Ticks run at 20 Hz; a component-relative delta is in blocks per tick.
+    const bool deltaSane = std::isfinite(delta.x) && std::isfinite(delta.y) && std::isfinite(delta.z) &&
+                           std::fabs(delta.x) < 8.f && std::fabs(delta.y) < 8.f && std::fabs(delta.z) < 8.f;
+    const float deltaSpeed = deltaSane ? std::sqrt(delta.x * delta.x + delta.z * delta.z) * 20.f : 0.f;
+    const float deltaVy    = deltaSane ? delta.y * 20.f : 0.f;
+
+    // The state vector is documented as pos/posPrev/delta, but if this build
+    // lays it out differently the delta stays zero while the player moves.
+    // Notice that and fall back to differencing positions.
+    if (mDeltaMode.load(std::memory_order_relaxed)) {
+        if (posSpeed > 0.5f && deltaSpeed < 0.05f) {
+            if (++mDeltaDeadTicks >= 20) {
+                mDeltaMode.store(false, std::memory_order_relaxed);
+                logger().warn("tick delta looks dead (pos speed {:.2f} b/s) - switching to position differencing", posSpeed);
+            }
+        } else {
+            mDeltaDeadTicks = 0;
+        }
     }
 
-    const float vx = (pos.x - mLastPos.x) / dt;
-    const float vy = (pos.y - mLastPos.y) / dt;
-    const float vz = (pos.z - mLastPos.z) / dt;
-    mLastPos = pos;
+    const bool useDelta = mDeltaMode.load(std::memory_order_relaxed);
+    float rawSpeed = useDelta ? deltaSpeed : posSpeed;
+    float rawVy    = useDelta ? deltaVy : posVy;
+
+    // Guard against ticking actors that are not the local player: nobody walks
+    // faster than ~15 blocks per second.
+    if (rawSpeed > 15.f) {
+        rawSpeed = 0.f;
+        rawVy = 0.f;
+    }
 
     const float blend = clampf(dt * 12.f, 0.f, 1.f);
-    mSmoothSpeed += (std::sqrt(vx * vx + vz * vz) - mSmoothSpeed) * blend;
-    mSmoothVy += (vy - mSmoothVy) * blend;
+    mSmoothSpeed += (rawSpeed - mSmoothSpeed) * blend;
+    mSmoothVy += (rawVy - mSmoothVy) * blend;
 
+    mPosSpeed.store(posSpeed, std::memory_order_relaxed);
+    mDeltaSpeed.store(deltaSpeed, std::memory_order_relaxed);
     mSpeed.store(mSmoothSpeed > 0.05f ? mSmoothSpeed : 0.f, std::memory_order_relaxed);
     mVerticalSpeed.store(mSmoothVy, std::memory_order_relaxed);
     // Bedrock has no cheap onGround query here: treat "barely moving vertically"
@@ -281,6 +319,20 @@ void RealisticHeadBobMod::onActorTick(void* actor) {
     // Walk ~4.3 b/s, sprint ~5.6 b/s.
     mSprinting.store(mSmoothSpeed > 5.0f, std::memory_order_relaxed);
     mHasSample.store(true, std::memory_order_relaxed);
+
+    if (now - mLastTickBeat > 2.0 && mTickBeats < 15) {
+        mLastTickBeat = now;
+        ++mTickBeats;
+        char buffer[256];
+        std::snprintf(buffer, sizeof(buffer),
+                      "tick#%d pos=(%.2f, %.2f, %.2f) delta=(%.3f, %.3f, %.3f) posSpeed=%.2f deltaSpeed=%.2f vy=%.2f",
+                      mTickBeats,
+                      static_cast<double>(pos.x), static_cast<double>(pos.y), static_cast<double>(pos.z),
+                      static_cast<double>(delta.x), static_cast<double>(delta.y), static_cast<double>(delta.z),
+                      static_cast<double>(posSpeed), static_cast<double>(deltaSpeed),
+                      static_cast<double>(mSmoothVy));
+        logger().info("{}", buffer);
+    }
 }
 
 void RealisticHeadBobMod::applyToCamera(void* component) {
@@ -295,16 +347,23 @@ void RealisticHeadBobMod::applyToCamera(void* component) {
     dt = clampf(dt, 1.f / 1000.f, 0.1f);
     mGameTime += dt;
 
-    if (!mLoggedSample) {
-        char buffer[192];
+    mFrames.fetch_add(1, std::memory_order_relaxed);
+    if (now - mLastBeat > (mBeatCount < 10 ? 1.0 : 5.0)) {
+        mLastBeat = now;
+        ++mBeatCount;
+        char buffer[320];
         std::snprintf(buffer, sizeof(buffer),
-                      "first sample speed=%.2f b/s vy=%.2f onGround=%d sprint=%d (profile %s)",
-                      static_cast<double>(mSpeed.load(std::memory_order_relaxed)),
+                      "beat ticks=%llu frames=%llu posSpeed=%.2f deltaSpeed=%.2f vy=%.2f ground=%d sprint=%d fade=%.2f mode=%s profile=%s",
+                      mTicks.load(std::memory_order_relaxed),
+                      mFrames.load(std::memory_order_relaxed),
+                      static_cast<double>(mPosSpeed.load(std::memory_order_relaxed)),
+                      static_cast<double>(mDeltaSpeed.load(std::memory_order_relaxed)),
                       static_cast<double>(mVerticalSpeed.load(std::memory_order_relaxed)),
                       mOnGround.load(std::memory_order_relaxed) ? 1 : 0,
                       mSprinting.load(std::memory_order_relaxed) ? 1 : 0,
+                      static_cast<double>(mState.bobFade),
+                      mDeltaMode.load(std::memory_order_relaxed) ? "delta" : "posdiff",
                       headbob::profile::layout().version);
-        mLoggedSample = true;
         logger().info("{}", buffer);
     }
 

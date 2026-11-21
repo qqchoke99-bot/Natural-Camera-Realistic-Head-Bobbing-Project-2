@@ -3,6 +3,7 @@
 #include <pl/Mod.hpp>
 
 #include <atomic>
+#include <cstdint>
 
 #include "mod/Config.h"
 #include "mod/HeadBob.h"
@@ -47,13 +48,22 @@ private:
     std::atomic<bool>  mOnGround{true};
     std::atomic<bool>  mSprinting{false};
     std::atomic<bool>  mHasSample{false};
+    std::atomic<float> mPosSpeed{0.f};      // speed derived from position deltas
+    std::atomic<float> mDeltaSpeed{0.f};    // speed derived from the engine's own tick delta
+    std::atomic<bool>  mDeltaMode{true};
+    std::atomic<unsigned long long> mTicks{0};
+    std::atomic<unsigned long long> mFrames{0};
 
     headbob::memory::Vec3 mLastPos{};
     bool   mHasLastPos    = false;
-    bool   mLoggedSample  = false;
+    int    mBeatCount     = 0;
     double mLastTickTime  = 0.0;
     double mLastFrameTime = 0.0;
     float  mGameTime      = 0.f;
     float  mSmoothSpeed   = 0.f;
     float  mSmoothVy      = 0.f;
+    int    mDeltaDeadTicks = 0;
+    int    mTickBeats      = 0;
+    double mLastTickBeat   = 0.0;
+    double mLastBeat      = 0.0;
 };
