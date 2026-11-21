@@ -72,6 +72,26 @@ finds no signature and stays silent instead of crashing.
 - `enabled`, `idleEnabled`, `enableWhenMounted`, `enableThirdPerson`
 - signature overrides: `cameraBlendSig`, `localPlayerTickSig`, `moduleName`
 
+## If it looks dead
+
+The mod logs what it sees (first 15 samples, one every 2 s; `beat` lines every
+1 s then every 5 s):
+
+```
+tick#1 pos=(12.30, 64.00, -8.10) delta=(0.210, 0.000, 0.000) posSpeed=4.20 deltaSpeed=4.20 vy=0.00
+beat ticks=42 frames=900 posSpeed=4.20 deltaSpeed=4.20 vy=0.00 ground=1 sprint=0 fade=1.00 mode=delta profile=1.26.62
+```
+
+Read it in order:
+
+| Symptom | Meaning |
+|---|---|
+| no `tick#` lines at all | the `NormalTick` hook never ran - the signature resolved somewhere inert |
+| `tick#` but `delta=(0,0,0)` and `posSpeed=0` | the player really is not moving, or the pointer is not the player |
+| `mode=posdiff` | the tick delta read as dead; the fallback took over |
+| `fade=1.00` but no visible bob | the camera write is being overwritten or is too weak: raise `globalStrength` |
+| `ground=0` while walking | the vertical-speed test is too tight for that terrain |
+
 ## Build
 
 Run from the repository root:
