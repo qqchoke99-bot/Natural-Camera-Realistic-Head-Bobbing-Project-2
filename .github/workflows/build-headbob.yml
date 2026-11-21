@@ -1,7 +1,7 @@
 name: Build Realistic Head Bob
 
-# The revived head-bob mod lives in headbob/ and is built per Minecraft build,
-# same policy as CameraOverhaul: one .levipack per game version.
+# standalone project in headbob/ (CameraOverhaul base + integrated step bob),
+# built with xmake exactly like its own repo.
 
 on:
   push:
@@ -14,73 +14,51 @@ on:
       - "headbob/**"
       - ".github/workflows/build-headbob.yml"
   workflow_dispatch:
-    inputs:
-      mcver:
-        description: "Minecraft Bedrock version to build for"
-        required: false
-        default: "all"
-        type: choice
-        options:
-          - all
-          - "1.26.50"
-          - "1.26.62"
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        mcver: ["1.26.50", "1.26.62"]
     steps:
       - uses: actions/checkout@v4
+
+      - name: Setup xmake
+        uses: xmake-io/github-action-setup-xmake@v1
 
       - uses: nttld/setup-ndk@v1
         id: ndk
         with:
           ndk-version: r28c
 
-      - name: Configure ${{ matrix.mcver }}
-        if: github.event.inputs.mcver == '' || github.event.inputs.mcver == 'all' || github.event.inputs.mcver == matrix.mcver
-        env:
-          ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
-        run: |
-          cmake -S headbob -B build-headbob-${{ matrix.mcver }} \
-            -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake \
-            -DANDROID_ABI=arm64-v8a \
-            -DANDROID_PLATFORM=android-28 \
-            -DANDROID_STL=c++_shared \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DMCVER=${{ matrix.mcver }}
-
-      - name: Build and package ${{ matrix.mcver }}
+      - name: Build and package
         id: build
         continue-on-error: true
-        if: github.event.inputs.mcver == '' || github.event.inputs.mcver == 'all' || github.event.inputs.mcver == matrix.mcver
+        working-directory: headbob
         run: |
           set -o pipefail
-          cmake --build build-headbob-${{ matrix.mcver }} --target levi_package -j$(nproc) 2>&1 \
-            | tee build-${{ matrix.mcver }}.log
+          xmake f -y -p android -a arm64-v8a -m release --ndk=${{ steps.ndk.outputs.ndk-path }} 2>&1 | tee build-config.log
+          xmake -y -v 2>&1 | tee build.log
 
-      # CI logs live on storage that some clients cannot reach; surface the real
-      # error as an annotation so it shows up in the run summary and the API.
+      # run logs live on storage some clients cannot reach, so republish the tail
+      # of the failure as an annotation (readable through the check-runs API).
       - name: Report build failure
         if: steps.build.outcome == 'failure'
         run: |
           python3 -c '
           import pathlib, sys
-          mcver = sys.argv[1]
-          log = pathlib.Path("build-" + mcver + ".log")
-          text = log.read_text(errors="ignore") if log.exists() else "no log captured"
-          tail = "\n".join(text.splitlines()[-40:])
+          text = ""
+          for name in ("headbob/build.log", "headbob/build-config.log"):
+              p = pathlib.Path(name)
+              if p.exists():
+                  text += p.read_text(errors="ignore")
+          tail = "\n".join(text.splitlines()[-40:]) if text else "no log captured"
           out = tail.replace("%", "%25").replace("\r", "").replace("\n", "%0A")
-          print("::error title=build " + mcver + "::" + out)
-          ' "${{ matrix.mcver }}"
+          print("::error title=realistic head bob build::" + out)
+          '
           exit 1
 
       - uses: actions/upload-artifact@v4
-        if: steps.build.outcome == 'success' && (github.event.inputs.mcver == '' || github.event.inputs.mcver == 'all' || github.event.inputs.mcver == matrix.mcver)
+        if: steps.build.outcome == 'success'
         with:
-          name: realistic-headbob-${{ matrix.mcver }}
-          path: build-headbob-${{ matrix.mcver }}/realistic_headbob-${{ matrix.mcver }}.levipack
+          name: RealisticHeadBob-1.26.62
+          path: headbob/build/android/arm64-v8a/release/RealisticHeadBob.levipack
           if-no-files-found: error

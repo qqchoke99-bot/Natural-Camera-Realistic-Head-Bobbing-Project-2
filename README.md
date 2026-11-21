@@ -97,22 +97,23 @@ xmake -y
 # -> build/android/arm64-v8a/release/CameraOverhaul-1.26.62.levipack
 ```
 
-## Realistic Head Bob (revived)
+## Realistic Head Bob
 
-`headbob/` holds the revived **Realistic Head Bob** mod (formerly
-[`qqchoke99-bot/1xmake.lua`](https://github.com/qqchoke99-bot/1xmake.lua) 1.0.0).
-It ships on its own, per game build:
+`headbob/` is the standalone **Realistic Head Bob** project (v2.0.0): the
+CameraOverhaul camera engine with a step head-bob integrated into the same tick,
+shipped as its own `.levipack`.
 
-| Package | Game build |
-|---|---|
-| `realistic_headbob-1.26.62.levipack` | 1.26.62 (1.26.62.1) |
-| `realistic_headbob-1.26.50.levipack` | 1.26.50 (1.26.50.1) |
+| Package | Game build | Version |
+|---|---|---|
+| `RealisticHeadBob.levipack` | 1.26.62.1 | 2.0.0-1.26.62 |
 
-Built by `.github/workflows/build-headbob.yml`; details in
-[`headbob/README.md`](headbob/README.md). Signatures verified uniquely against
-the 1.26.62 library (CameraBlendSystemTick `0x11EA58CC`, NormalTick
-`0xAF5E7A0`). This mod is standalone - CameraOverhaul here is unchanged at
-1.1.5-beta, and the two are independent.
+Built by `.github/workflows/build-headbob.yml` with xmake, exactly like the
+original project. Actor offsets (`0x228` / `0x238`) and both signatures are
+pinned to 1.26.62 and verified against that library - see
+[`headbob/README.md`](headbob/README.md).
+
+CameraOverhaul above is unchanged and independently installable; the two share
+the same camera hook path, so run one of them at a time.
 
 ## License
 

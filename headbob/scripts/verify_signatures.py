@@ -1,10 +1,8 @@
 import struct, sys, numpy as np
 
 # Usage: python3 scripts/verify_signatures.py <path to libminecraftpe.so>
-# Prints every full-pattern match for the signatures this mod relies on.
-if len(sys.argv) < 2:
-    sys.exit('usage: verify_signatures.py <libminecraftpe.so>')
-LIB = sys.argv[1]
+# Confirms both signatures this mod depends on still match exactly once.
+LIB = sys.argv[1] if len(sys.argv) > 1 else 'libminecraftpe.so'
 data = open(LIB, 'rb').read()
 
 # section table (for file-offset -> virtual address)
