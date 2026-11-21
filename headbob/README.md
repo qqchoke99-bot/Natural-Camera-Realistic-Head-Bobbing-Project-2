@@ -63,6 +63,8 @@ instead of faulting.
 
 ## Build
 
+Run from the repository root:
+
 ```sh
 cmake -S headbob -B build -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake \
       -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-28 -DANDROID_STL=c++_shared \
@@ -72,6 +74,9 @@ cmake --build build --target levi_package -j$(nproc)
 ```
 
 CI: `.github/workflows/build-headbob.yml` builds both versions.
+
+Default config files are checked in under `config/` (see `config/README.md`);
+no host tool has to run during the cross build.
 
 ## Credits
 

@@ -42,7 +42,6 @@ add_library(${MOD_LIBRARY_NAME} SHARED
     src/mod/Mod.cpp
     src/mod/Config.cpp
     src/mod/HeadBob.cpp
-    src/config_generator.cpp
 )
 
 target_include_directories(${MOD_LIBRARY_NAME} PRIVATE
@@ -68,28 +67,17 @@ add_custom_target(levi_package
     COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/package/${MOD_ID}
     COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:${MOD_LIBRARY_NAME}> ${CMAKE_BINARY_DIR}/package/${MOD_ID}/
     COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/manifest.json ${CMAKE_BINARY_DIR}/package/${MOD_ID}/
+    # Pre-generated on a host (see config/README.md): a cross-compiled helper
+    # cannot run on the build runner.
     COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/package/${MOD_ID}/config
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            ${CMAKE_BINARY_DIR}/config.json
-            ${CMAKE_BINARY_DIR}/config.schema.json
+            ${CMAKE_CURRENT_SOURCE_DIR}/config/config.json
+            ${CMAKE_CURRENT_SOURCE_DIR}/config/config.schema.json
             ${CMAKE_BINARY_DIR}/package/${MOD_ID}/config/
     COMMAND ${CMAKE_COMMAND} -E tar cf ${CMAKE_BINARY_DIR}/${MOD_ID}-${MCVER}.levipack
             --format=zip
             -C ${CMAKE_BINARY_DIR}/package
             ${MOD_ID}
-    DEPENDS ${MOD_LIBRARY_NAME} generate_config
+    DEPENDS ${MOD_LIBRARY_NAME}
     COMMENT "Packaging ${MOD_ID}-${MCVER}.levipack"
 )
-
-# Config generator runs at build time
-add_executable(generate_config src/config_generator.cpp src/mod/Config.cpp)
-target_include_directories(generate_config PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
-target_compile_definitions(generate_config PRIVATE HEADBOB_CONFIG_GENERATOR=1)
-add_custom_command(
-    OUTPUT ${CMAKE_BINARY_DIR}/config.json ${CMAKE_BINARY_DIR}/config.schema.json
-    COMMAND generate_config ${CMAKE_BINARY_DIR}/config.json ${CMAKE_BINARY_DIR}/config.schema.json
-    DEPENDS generate_config
-    COMMENT "Generating default config.json + schema"
-)
-add_custom_target(generate_config_files DEPENDS ${CMAKE_BINARY_DIR}/config.json)
-add_dependencies(levi_package generate_config_files)

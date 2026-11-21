@@ -1,6 +1,6 @@
 #include "mod/Mod.h"
 
-#include <ll/api/mod/RegisterHelper.h>
+#include <pl/Mod.hpp>
 #include <pl/memory/Hook.hpp>
 #include <pl/memory/Signature.hpp>
 
@@ -91,14 +91,15 @@ RealisticHeadBobMod& RealisticHeadBobMod::instance() {
     return inst;
 }
 
-RealisticHeadBobMod::RealisticHeadBobMod()
-    : mSelf(*ll::mod::NativeMod::current()) {}
+bool RealisticHeadBobMod::load(pl::mod::ModContext& context) {
+    mContext = &context;
+    auto& log = logger();
+    log.info("Realistic Head Bob {} (build target: {}, state vector {:#x})",
+             context.info().version,
+             headbob::profile::layout().version,
+             static_cast<unsigned long long>(headbob::profile::layout().stateVectorComponent));
 
-bool RealisticHeadBobMod::load() {
-    auto& log = getSelf().getLogger();
-    log.info("Realistic Head Bob load (build target: {})", headbob::profile::layout().version);
-
-    const auto cfgPath = getSelf().getModDir() / "config" / "config.json";
+    const auto cfgPath = context.configDir() / "config.json";
     auto& cfg = headbob::Config::get();
     if (!cfg.loadFromFile(cfgPath.string())) {
         cfg.loadDefaults();
@@ -116,8 +117,8 @@ bool RealisticHeadBobMod::load() {
     return true;
 }
 
-bool RealisticHeadBobMod::enable() {
-    auto& log = getSelf().getLogger();
+bool RealisticHeadBobMod::enable(pl::mod::ModContext&) {
+    auto& log = logger();
     // No ModuleBuilder on purpose: Levi 1.5.25 crashed in registerModule.
 
     const bool cameraOk = hookCameraBlend();
@@ -135,18 +136,18 @@ bool RealisticHeadBobMod::enable() {
     return cameraOk;
 }
 
-bool RealisticHeadBobMod::disable() {
+bool RealisticHeadBobMod::disable(pl::mod::ModContext&) {
     unhookAll();
     return true;
 }
 
-bool RealisticHeadBobMod::unload() {
+bool RealisticHeadBobMod::unload(pl::mod::ModContext&) {
     unhookAll();
     return true;
 }
 
 bool RealisticHeadBobMod::hookCameraBlend() {
-    auto& log = getSelf().getLogger();
+    auto& log = logger();
     auto& cfg = headbob::Config::get();
 
     const std::string sig = cfg.cameraBlendSig.empty() ? kCameraBlendSig : cfg.cameraBlendSig;
@@ -172,7 +173,7 @@ bool RealisticHeadBobMod::hookCameraBlend() {
 }
 
 bool RealisticHeadBobMod::hookPlayerTick() {
-    auto& log = getSelf().getLogger();
+    auto& log = logger();
     auto& cfg = headbob::Config::get();
 
     const std::string sig = cfg.localPlayerTickSig.empty() ? kLocalPlayerTickSig : cfg.localPlayerTickSig;
@@ -198,7 +199,8 @@ bool RealisticHeadBobMod::hookPlayerTick() {
 }
 
 void RealisticHeadBobMod::unhookAll() {
-    auto& log = getSelf().getLogger();
+    if (!mContext) return;
+    auto& log = logger();
 
     if (mTickTarget && mOrigTick) {
         pl::memory::unhook(mTickTarget, reinterpret_cast<void*>(&RealisticHeadBobMod::tickDetour));
@@ -303,7 +305,7 @@ void RealisticHeadBobMod::applyToCamera(void* component) {
                       mSprinting.load(std::memory_order_relaxed) ? 1 : 0,
                       headbob::profile::layout().version);
         mLoggedSample = true;
-        getSelf().getLogger().info("{}", buffer);
+        logger().info("{}", buffer);
     }
 
     const auto delta = headbob::update(
@@ -337,4 +339,4 @@ void RealisticHeadBobMod::applyToCamera(void* component) {
     *quat = quatNormalize(quatMul(*quat, d));
 }
 
-LL_REGISTER_MOD(RealisticHeadBobMod, RealisticHeadBobMod::instance());
+PL_REGISTER_MOD(RealisticHeadBobMod, RealisticHeadBobMod::instance());

@@ -1,0 +1,20 @@
+{
+  "title": "Realistic Head Bob",
+  "type": "object",
+  "properties": {
+    "enabled": { "type": "boolean", "default": true },
+    "mode": {
+      "type": "string",
+      "enum": ["default", "bodycam", "comfort", "custom"],
+      "default": "bodycam"
+    },
+    "globalStrength": { "type": "number", "minimum": 0, "maximum": 3, "default": 0.32 },
+    "stepStrength": { "type": "number", "minimum": 0, "maximum": 3, "default": 1.0 },
+    "swayStrength": { "type": "number", "minimum": 0, "maximum": 3, "default": 1.0 },
+    "smoothHz": { "type": "number", "minimum": 0.25, "maximum": 6, "default": 1.75 },
+    "damping": { "type": "number", "minimum": 0.1, "maximum": 3, "default": 1.25 },
+    "moduleName": { "type": "string", "default": "libminecraftpe.so" },
+    "cameraBlendSig": { "type": "string", "default": "" },
+    "localPlayerTickSig": { "type": "string", "default": "" }
+  }
+}

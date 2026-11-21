@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ll/api/mod/NativeMod.h>
+#include <pl/Mod.hpp>
 
 #include <atomic>
 
@@ -12,16 +12,14 @@ class RealisticHeadBobMod {
 public:
     static RealisticHeadBobMod& instance();
 
-    RealisticHeadBobMod();
-
-    [[nodiscard]] ll::mod::NativeMod& getSelf() const { return mSelf; }
-
-    bool load();
-    bool enable();
-    bool disable();
-    bool unload();
+    bool load(pl::mod::ModContext& context);
+    bool enable(pl::mod::ModContext& context);
+    bool disable(pl::mod::ModContext& context);
+    bool unload(pl::mod::ModContext& context);
 
 private:
+    pl::log::Logger& logger() const { return mContext->logger(); }
+
     bool hookCameraBlend();
     bool hookPlayerTick();
     void unhookAll();
@@ -35,8 +33,8 @@ private:
     static void cameraBlendDetour(void* component, void* blendState, float factor);
     static void tickDetour(void* actor);
 
-    ll::mod::NativeMod& mSelf;
-    headbob::State      mState{};
+    pl::mod::ModContext* mContext = nullptr;
+    headbob::State       mState{};
 
     void* mCameraTarget = nullptr;
     void* mTickTarget   = nullptr;
