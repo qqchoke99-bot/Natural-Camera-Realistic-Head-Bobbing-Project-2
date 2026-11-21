@@ -26,7 +26,7 @@ Everything build-specific lives in one table:
 | Profile | Game build | Status |
 |---|---|---|
 | `1.26.50` | 1.26.50.1 | shipped and played |
-| `1.26.62` | 1.26.62.1 | verified against the 1.26.62 `libminecraftpe.so` (build 2026-11-06): both signatures unique, camera offset unchanged, actor offsets found at their new values |
+| `1.26.62` | 1.26.62.1 | shipped and played; verified in game (1.1.5-beta-1.26.62) |
 
 Scan result for the 1.26.62 library (342 MB, `aarch64`): both patterns match
 **exactly once**, `NormalTick` @ `0xAF5E7A0`, `CameraBlendSystemTick` @
@@ -34,7 +34,7 @@ Scan result for the 1.26.62 library (342 MB, `aarch64`): both patterns match
 `+0x28` (`ldur q0, [x22, #0x28]` / `stur q0, [x20, #0x28]` in the tick body).
 
 The **actor component offsets moved `+0x20`** in 1.26.62, which is what the
-first 1.26.62 test tripped over (`0x208`/`0x218` no longer hold component
+first 1.26.62 test tripped over and the reason the guard exists (`0x208`/`0x218` no longer hold component
 pointers). The new values come from the binary itself:
 
 | Field | 1.26.50 | 1.26.62 | Evidence in 1.26.62 |

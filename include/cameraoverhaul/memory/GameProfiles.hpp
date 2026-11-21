@@ -51,7 +51,8 @@ inline constexpr std::array<GameProfile, kGameProfileCount> kGameProfiles{{
             }},
         }},
     },
-    // 1.26.62 (libminecraftpe.so build 2026-11-06, 342 MB):
+    // 1.26.62 (libminecraftpe.so build 2026-11-06, 342 MB) - verified in game
+    // on 1.26.62.1 with 1.1.5-beta-1.26.62:
     //   signatures - both patterns match exactly once,
     //                NormalTick @ 0xAF5E7A0, CameraBlendSystemTick @ 0x11EA58CC
     //   cameraRotation 0x28 - unchanged; the tick body still does
