@@ -54,11 +54,33 @@ jobs:
             -DMCVER=${{ matrix.mcver }}
 
       - name: Build and package ${{ matrix.mcver }}
+        id: build
+        continue-on-error: true
         if: github.event.inputs.mcver == '' || github.event.inputs.mcver == 'all' || github.event.inputs.mcver == matrix.mcver
-        run: cmake --build build-headbob-${{ matrix.mcver }} --target levi_package -j$(nproc)
+        run: |
+          set -o pipefail
+          cmake --build build-headbob-${{ matrix.mcver }} --target levi_package -j$(nproc) 2>&1 \
+            | tee build-${{ matrix.mcver }}.log
+
+      # CI logs live on storage that some clients cannot reach; surface the real
+      # error as an annotation so it shows up in the run summary and the API.
+      - name: Report build failure
+        if: steps.build.outcome == 'failure'
+        run: |
+          python3 -c '
+          import pathlib, sys
+          mcver = sys.argv[1]
+          log = pathlib.Path("build-" + mcver + ".log")
+          text = log.read_text(errors="ignore") if log.exists() else "no log captured"
+          lines = [l for l in text.splitlines() if "error" in l.lower()]
+          tail = "\n".join(lines[-25:]) if lines else "\n".join(text.splitlines()[-25:])
+          out = tail.replace("%", "%25").replace("\r", "").replace("\n", "%0A")
+          print("::error title=build " + mcver + "::" + out)
+          ' "${{ matrix.mcver }}"
+          exit 1
 
       - uses: actions/upload-artifact@v4
-        if: github.event.inputs.mcver == '' || github.event.inputs.mcver == 'all' || github.event.inputs.mcver == matrix.mcver
+        if: steps.build.outcome == 'success' && (github.event.inputs.mcver == '' || github.event.inputs.mcver == 'all' || github.event.inputs.mcver == matrix.mcver)
         with:
           name: realistic-headbob-${{ matrix.mcver }}
           path: build-headbob-${{ matrix.mcver }}/realistic_headbob-${{ matrix.mcver }}.levipack
