@@ -97,6 +97,21 @@ xmake -y
 # -> build/android/arm64-v8a/release/CameraOverhaul-1.26.62.levipack
 ```
 
+## Realistic Head Bob (revived)
+
+`headbob/` holds the revived **Realistic Head Bob** mod (formerly
+[`qqchoke99-bot/1xmake.lua`](https://github.com/qqchoke99-bot/1xmake.lua) 1.0.0).
+It ships on its own, per game build:
+
+| Package | Game build |
+|---|---|
+| `realistic_headbob-1.26.62.levipack` | 1.26.62 (1.26.62.1) |
+| `realistic_headbob-1.26.50.levipack` | 1.26.50 (1.26.50.1) |
+
+Built by `.github/workflows/build-headbob.yml`; details in
+[`headbob/README.md`](headbob/README.md). The two mods are independent - either
+can be installed without the other, and both can run together.
+
 ## License
 
 GNU GPL v3.0.

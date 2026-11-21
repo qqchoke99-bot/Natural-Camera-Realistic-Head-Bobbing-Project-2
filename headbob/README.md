@@ -50,6 +50,17 @@ Every component pointer is probed with `mincore()` before it is dereferenced
 (`src/util/Memory.h`), so a build with moved offsets makes the mod go quiet
 instead of faulting.
 
+## Install
+
+1. Download the artifact for your game build from the latest
+   **Build Realistic Head Bob** run (Actions -> that run -> Artifacts):
+   `realistic-headbob-1.26.62` or `realistic-headbob-1.26.50`.
+2. Unzip it: `realistic_headbob-<version>.levipack`.
+3. In LeviLauncher, install that `.levipack` like any other mod and enable it.
+
+Packages are pinned per game build, so installing the 1.26.50 pack on 1.26.62
+finds no signature and stays silent instead of crashing.
+
 ## Config
 
 `config/config.json` next to the library:
