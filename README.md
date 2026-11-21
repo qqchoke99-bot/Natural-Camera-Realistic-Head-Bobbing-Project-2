@@ -25,15 +25,30 @@ Everything build-specific lives in one table:
 
 | Profile | Game build | Status |
 |---|---|---|
-| `1.26.50` | 1.26.50.1 | verified |
-| `1.26.62` | 1.26.62.1 | patterns copied from 1.26.50, pending scan of the 1.26.62 library |
+| `1.26.50` | 1.26.50.1 | shipped and played |
+| `1.26.62` | 1.26.62.1 | signatures unique and camera offset confirmed against the 1.26.62 `libminecraftpe.so` (build 2026-11-06); actor offsets unchanged, confirmed by the first-tick log |
+
+Scan result for the 1.26.62 library (342 MB, `aarch64`): both patterns match
+**exactly once**, `NormalTick` @ `0xAF5E7A0`, `CameraBlendSystemTick` @
+`0x11EA58CC`. The rotation quaternion in the camera component is still at
+`+0x28` (`ldur q0, [x22, #0x28]` / `stur q0, [x20, #0x28]` in the tick body).
 
 ### Diagnostics
 
-`adb logcat -s CameraOverhaul` reports which profile was compiled in, the
-address of each resolved signature, and whether the actor offsets look sane. If
-the offsets resolve but read implausible values, the module disables the camera
-effects and logs why.
+`adb logcat -s CameraOverhaul` reports which profile was compiled in and the
+address of each resolved signature, then prints one sample from the local player
+on the first tick:
+
+```
+signatures: NormalTick at 0xAF5E7A0
+signatures: CameraBlendSystemTick at 0x11EA58CC
+signatures: matched game profile 1.26.62
+sdk: first sample pos=(112.5, 64.0, -38.2) yaw=91.4 pitch=-3.0
+```
+
+Those numbers are the direct proof that the actor offsets fit the build. If they
+are nonsense the module disables the camera effects after 40 ticks and says so,
+instead of applying a velocity derived from garbage.
 
 ### Adding a new game version
 

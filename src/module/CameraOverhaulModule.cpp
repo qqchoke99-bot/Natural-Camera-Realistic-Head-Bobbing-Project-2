@@ -12,6 +12,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <cstdio>
 #include <string>
 
 namespace {
@@ -35,6 +36,18 @@ float clampf(float v, float lo, float hi) {
 
 // Cheap sanity check for values read through version-specific offsets. A
 // mismatch shows up as garbage coordinates long before it shows up as a crash.
+std::string sampleText(const cameraoverhaul::sdk::Vec3& position,
+                       const cameraoverhaul::sdk::Vec2& rotation) {
+    char buffer[192];
+    std::snprintf(buffer, sizeof(buffer),
+                  "sdk: first sample pos=(%.1f, %.1f, %.1f) yaw=%.1f pitch=%.1f "
+                  "(if these are nonsense the actor offsets do not fit this build)",
+                  static_cast<double>(position.x), static_cast<double>(position.y),
+                  static_cast<double>(position.z), static_cast<double>(rotation.y),
+                  static_cast<double>(rotation.x));
+    return std::string(buffer);
+}
+
 bool plausiblePosition(const cameraoverhaul::sdk::Vec3& position) {
     if (!std::isfinite(position.x) || !std::isfinite(position.y) || !std::isfinite(position.z)) {
         return false;
@@ -147,6 +160,7 @@ struct CameraState {
 
     int  invalidTicks = 0;
     bool warnedInvalidOffsets = false;
+    bool loggedFirstSample = false;
 
     void reset() { *this = CameraState{}; }
 };
@@ -304,6 +318,10 @@ void CameraOverhaulModule::onTick(void* playerPtr) {
         return;
     }
     g_state.invalidTicks = 0;
+    if (!g_state.loggedFirstSample) {
+        g_state.loggedFirstSample = true;
+        cameraoverhaul::logInfo(sampleText(pos, rot));
+    }
 
     const double now = nowSeconds();
     float dt = 0.05f;
