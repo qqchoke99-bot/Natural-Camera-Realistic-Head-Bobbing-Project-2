@@ -37,6 +37,25 @@ inline bool patchMemory(void* address, const void* data, std::size_t size) {
     return true;
 }
 
+// Fault-free probe: is this buffer inside mapped pages? mincore() answers
+// without touching the memory, so a pointer read from a stale struct offset
+// (a float bit pattern, a bool, ...) is rejected here instead of raising
+// SIGSEGV inside the game.
+inline bool readable(const void* address, std::size_t length) {
+    if (!address || length == 0) return false;
+    const auto value = reinterpret_cast<std::uintptr_t>(address);
+    if (value < 0x1000) return false;
+    const long pageSizeValue = sysconf(_SC_PAGESIZE);
+    if (pageSizeValue <= 0) return false;
+    const auto pageSize = static_cast<std::uintptr_t>(pageSizeValue);
+    const auto firstPage = value & ~(pageSize - 1);
+    const auto lastPage = (value + length - 1) & ~(pageSize - 1);
+    unsigned char present = 0;
+    if (mincore(reinterpret_cast<void*>(firstPage), pageSize, &present) != 0) return false;
+    if (lastPage != firstPage && mincore(reinterpret_cast<void*>(lastPage), pageSize, &present) != 0) return false;
+    return true;
+}
+
 template <class T>
 T& field(void* object, std::size_t offset) {
     return *reinterpret_cast<T*>(reinterpret_cast<std::uintptr_t>(object) + offset);

@@ -300,9 +300,13 @@ void CameraOverhaulModule::onTick(void* playerPtr) {
     auto* player = reinterpret_cast<cameraoverhaul::sdk::Player*>(playerPtr);
 
     // Offsets come from the active GameProfile. Verify them every tick so a
-    // build with moved members produces no camera motion instead of nonsense.
-    if (!player->stateVectorComponent() || !player->rotationComponent()) {
-        noteInvalidSample("missing actor components");
+    // build with moved members produces no camera motion instead of nonsense -
+    // and never dereference a component pointer read from a stale offset.
+    if (!cameraoverhaul::sdk::readable(player->stateVectorComponent(),
+                                       sizeof(cameraoverhaul::sdk::Vec3)) ||
+        !cameraoverhaul::sdk::readable(player->rotationComponent(),
+                                       sizeof(cameraoverhaul::sdk::Vec2))) {
+        noteInvalidSample("actor components unreadable");
         return;
     }
 

@@ -54,16 +54,23 @@ inline constexpr std::array<GameProfile, kGameProfileCount> kGameProfiles{{
     // 1.26.62 (libminecraftpe.so build 2026-11-06, 342 MB):
     //   signatures - both patterns match exactly once,
     //                NormalTick @ 0xAF5E7A0, CameraBlendSystemTick @ 0x11EA58CC
-    //   cameraRotation 0x28 - confirmed from the tick body:
-    //                `ldur q0, [x22, #0x28]` / `stur q0, [x20, #0x28]`, and the
+    //   cameraRotation 0x28 - unchanged; the tick body still does
+    //                `ldur q0, [x22, #0x28]` / `stur q0, [x20, #0x28]` and the
     //                euler-to-quat stores `stp s4, s1, [x20, #0x28]`
-    //   actorStateVectorComponent / actorRotationComponent - unchanged from
-    //                1.26.50, confirmed at runtime by the sample log in
-    //                CameraOverhaulModule::onTick (logcat, first tick)
+    //   actor components - both moved +0x20 in this build (0x208/0x218 stop
+    //                being component pointers, which is what broke the first
+    //                1.26.62 test):
+    //                  state vector 0x228 - Vec3 getter @0xFD8ED18:
+    //                    ldr x8, [x0, #0x228]; ldp s0, s1, [x8];
+    //                    ldr s2, [x8, #8]; ret
+    //                  actor rotation 0x238 - component taken @0xFD8709C and
+    //                    single-field setters @0xFD8FD90 (+0), 0xFD8FD9C (+4),
+    //                    0xFD8FDA8 (+8), 0xFD8FDB4 (+0xc): current pitch/yaw
+    //                    then previous, so the Vec2 the mod reads is at +0
     GameProfile{
         "1.26.62",
-        0x208,
-        0x218,
+        0x228,
+        0x238,
         0x28,
         {{
             SignaturePatterns{{ // NormalTick

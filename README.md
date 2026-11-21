@@ -26,12 +26,22 @@ Everything build-specific lives in one table:
 | Profile | Game build | Status |
 |---|---|---|
 | `1.26.50` | 1.26.50.1 | shipped and played |
-| `1.26.62` | 1.26.62.1 | signatures unique and camera offset confirmed against the 1.26.62 `libminecraftpe.so` (build 2026-11-06); actor offsets unchanged, confirmed by the first-tick log |
+| `1.26.62` | 1.26.62.1 | verified against the 1.26.62 `libminecraftpe.so` (build 2026-11-06): both signatures unique, camera offset unchanged, actor offsets found at their new values |
 
 Scan result for the 1.26.62 library (342 MB, `aarch64`): both patterns match
 **exactly once**, `NormalTick` @ `0xAF5E7A0`, `CameraBlendSystemTick` @
 `0x11EA58CC`. The rotation quaternion in the camera component is still at
 `+0x28` (`ldur q0, [x22, #0x28]` / `stur q0, [x20, #0x28]` in the tick body).
+
+The **actor component offsets moved `+0x20`** in 1.26.62, which is what the
+first 1.26.62 test tripped over (`0x208`/`0x218` no longer hold component
+pointers). The new values come from the binary itself:
+
+| Field | 1.26.50 | 1.26.62 | Evidence in 1.26.62 |
+|---|---|---|---|
+| state vector component | `0x208` | `0x228` | `Vec3` getter @ `0xFD8ED18`: `ldr x8,[x0,#0x228]` / `ldp s0,s1,[x8]` / `ldr s2,[x8,#8]` / `ret` |
+| actor rotation component | `0x218` | `0x238` | component accessor @ `0xFD8709C`; field setters @ `0xFD8FD90` (`+0`), `0xFD8FD9C` (`+4`), `0xFD8FDA8` (`+8`), `0xFD8FDB4` (`+0xc`) — current pitch/yaw then previous, so the `Vec2` is at `+0` |
+| camera rotation | `0x28` | `0x28` | unchanged, see the tick body above |
 
 ### Diagnostics
 
@@ -46,9 +56,10 @@ signatures: matched game profile 1.26.62
 sdk: first sample pos=(112.5, 64.0, -38.2) yaw=91.4 pitch=-3.0
 ```
 
-Those numbers are the direct proof that the actor offsets fit the build. If they
-are nonsense the module disables the camera effects after 40 ticks and says so,
-instead of applying a velocity derived from garbage.
+Those numbers are the direct proof that the actor offsets fit the build. Every
+component pointer is also probed with `mincore()` before it is dereferenced, so
+a pointer read from a stale offset is rejected instead of faulting. If the
+offsets do not fit, the effects stay off after 40 ticks and the log says why.
 
 ### Adding a new game version
 
@@ -66,6 +77,10 @@ instead of applying a velocity derived from garbage.
    append the new pattern inside the same `SignaturePatterns` block; old
    candidates stay first so the patterns that already worked are tried first.
 3. Re-run the scan until the new profile has exactly one hit per signature.
+   For the component offsets, look for the `Vec3` getter shape
+   `ldr x8, [x0, #imm]; ldp s0, s1, [x8]; ldr s2, [x8, #8]; ret` (state vector)
+   and the single-float setters `ldr x8, [x0, #imm]; str s0, [x8, #0/#4]; ret`
+   (rotation: pitch at `+0`, yaw at `+4`, previous values at `+8`/`+0xc`).
 4. `--dump <RVA> <length>` hex-dumps code around a hit when a pattern has to be
    rebuilt from scratch.
 5. Add the version to `option("mcver")` in `xmake.lua` and to the build matrix
