@@ -32,17 +32,20 @@ jobs:
         with:
           ndk-version: r28c
 
+      # One .levipack per game build; the signature profile is pinned per package.
       - name: Build and package
         run: |
-          xmake f -y -p android -a arm64-v8a -m release --ndk=${{ steps.ndk.outputs.ndk-path }}
-          xmake -y
+          for mcver in 1.26.50 1.26.62; do
+            xmake f -y -p android -a arm64-v8a -m release --ndk=${{ steps.ndk.outputs.ndk-path }} --mcver="$mcver"
+            xmake -y
+          done
 
       - name: Publish to public release channel
         env:
           RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
           TAG: ${{ github.ref_name }}
           PUBLIC_REPO: DrukisMC/CameraOverhaul-Releases
-          PACKAGE: build/android/arm64-v8a/release/CameraOverhaul.levipack
+          PACKAGES: build/android/arm64-v8a/release/CameraOverhaul-1.26.50.levipack build/android/arm64-v8a/release/CameraOverhaul-1.26.62.levipack
           MOD_NAME: CameraOverhaul
         run: |
           set -euo pipefail
@@ -55,10 +58,12 @@ jobs:
             echo "Empty version from tag $TAG" >&2
             exit 1
           fi
-          if [ ! -f "$PACKAGE" ]; then
-            echo "Package not found: $PACKAGE" >&2
-            exit 1
-          fi
+          for package in $PACKAGES; do
+            if [ ! -f "$package" ]; then
+              echo "Package not found: $package" >&2
+              exit 1
+            fi
+          done
           rm -rf public
           git clone "https://x-access-token:${RELEASE_TOKEN}@github.com/${PUBLIC_REPO}.git" public
           python3 - "$VERSION" <<'PY'
@@ -88,11 +93,11 @@ jobs:
           fi
           NOTES="$(git tag -l --format='%(contents)' "$TAG" 2>/dev/null || true)"
           if [ -z "${NOTES// }" ]; then
-            NOTES="$MOD_NAME $TAG for Minecraft Bedrock 1.26.45.1 (LeviLauncher)."
+            NOTES="$MOD_NAME $TAG for Minecraft Bedrock 1.26.50.1 and 1.26.62.1 (LeviLauncher)."
           fi
           if GH_TOKEN="$RELEASE_TOKEN" gh release view "$TAG" --repo "$PUBLIC_REPO" >/dev/null 2>&1; then
             echo "release $TAG exists, uploading asset"
-            GH_TOKEN="$RELEASE_TOKEN" gh release upload "$TAG" --repo "$PUBLIC_REPO" --clobber "$PACKAGE"
+            GH_TOKEN="$RELEASE_TOKEN" gh release upload "$TAG" --repo "$PUBLIC_REPO" --clobber $PACKAGES
           else
-            GH_TOKEN="$RELEASE_TOKEN" gh release create "$TAG" --repo "$PUBLIC_REPO" --title "$MOD_NAME $TAG" --notes "$NOTES" "$PACKAGE"
+            GH_TOKEN="$RELEASE_TOKEN" gh release create "$TAG" --repo "$PUBLIC_REPO" --title "$MOD_NAME $TAG" --notes "$NOTES" $PACKAGES
           fi

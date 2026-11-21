@@ -20,20 +20,21 @@ def parse_version(path: Path) -> dict:
         raise ValueError("Missing version metadata: " + ", ".join(missing))
     return values
 
-def build_manifest(values: dict) -> dict:
+def build_manifest(values: dict, minecraft_version: str) -> dict:
     return {
         "type": "preload-native",
         "name": values["Name"],
         "author": values["Author"],
         "description": values["Description"],
-        "version": values["Version"],
+        "version": f"{values['Version']}-{minecraft_version}",
         "entry": LIBRARY_NAME,
         "icon": "icon.png",
         "overwrite_files": ["icon.png"],
         "overwrite_folders": [],
     }
 
-def write_package(library: Path, icon: Path, version_header: Path, output: Path) -> None:
+def write_package(library: Path, icon: Path, version_header: Path, output: Path,
+                  minecraft_version: str) -> None:
     if not library.is_file():
         raise FileNotFoundError(f"Library not found: {library}")
     if not icon.is_file():
@@ -41,7 +42,7 @@ def write_package(library: Path, icon: Path, version_header: Path, output: Path)
     if not version_header.is_file():
         raise FileNotFoundError(f"Version header not found: {version_header}")
 
-    manifest = build_manifest(parse_version(version_header))
+    manifest = build_manifest(parse_version(version_header), minecraft_version)
     output.parent.mkdir(parents=True, exist_ok=True)
     if output.exists():
         output.unlink()
@@ -70,10 +71,13 @@ def main() -> int:
     parser.add_argument("--library", required=True, type=Path)
     parser.add_argument("--icon", required=True, type=Path)
     parser.add_argument("--version-header", required=True, type=Path)
+    parser.add_argument("--minecraft-version", required=True,
+                        help="game build the package is pinned to, e.g. 1.26.62")
     parser.add_argument("--output", required=True, type=Path)
     args = parser.parse_args()
     try:
-        write_package(args.library.resolve(), args.icon.resolve(), args.version_header.resolve(), args.output.resolve())
+        write_package(args.library.resolve(), args.icon.resolve(), args.version_header.resolve(),
+                      args.output.resolve(), args.minecraft_version)
     except Exception as error:
         print(error, file=sys.stderr)
         return 1

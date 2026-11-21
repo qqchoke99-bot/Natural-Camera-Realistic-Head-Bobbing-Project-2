@@ -8,8 +8,8 @@ namespace cameraoverhaul::sdk {
 
 class Actor {
 public:
-    void* stateVectorComponent() const { return field<void*>(this, offsets::Actor::mStateVectorComponent); }
-    void* rotationComponent() const { return field<void*>(this, offsets::Actor::mActorRotationComponent); }
+    void* stateVectorComponent() const { return field<void*>(this, offsets::Actor::stateVectorComponent()); }
+    void* rotationComponent() const { return field<void*>(this, offsets::Actor::rotationComponent()); }
 
     Vec3 position() const {
         auto* component = stateVectorComponent();

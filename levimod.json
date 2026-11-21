@@ -1,14 +1,15 @@
 {
   "schema_version": 1,
   "id": "cameraoverhaul",
-  "version": "1.1.3-beta-1.26.50",
+  "version": "1.1.4-beta",
   "minecraft_versions": [
-    "1.26.50.1"
+    "1.26.50.1",
+    "1.26.62.1"
   ],
   "info": {
     "name": "CameraOverhaul",
     "author": "DrukisMC",
-    "description": "Cinematic camera for Minecraft Bedrock: movement pitch, turning roll and idle sway.",
+    "description": "Cinematic camera for Minecraft Bedrock: movement pitch, turning roll and idle sway. One package per game build.",
     "homepage_url": "https://github.com/DrukisMC/CameraOverhaul",
     "icon": "assets/icon.png",
     "tags": [
@@ -21,7 +22,8 @@
       "*.levipack"
     ],
     "labels": {
-      "CameraOverhaul.levipack": "LeviPack"
+      "CameraOverhaul-1.26.50.levipack": "LeviPack 1.26.50",
+      "CameraOverhaul-1.26.62.levipack": "LeviPack 1.26.62"
     }
   }
 }

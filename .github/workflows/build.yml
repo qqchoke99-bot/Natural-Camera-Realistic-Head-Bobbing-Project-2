@@ -5,10 +5,24 @@ on:
     branches: [main, master]
   pull_request:
   workflow_dispatch:
+    inputs:
+      mcver:
+        description: "Minecraft Bedrock version to build for"
+        required: false
+        default: "all"
+        type: choice
+        options:
+          - all
+          - "1.26.50"
+          - "1.26.62"
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        mcver: ["1.26.50", "1.26.62"]
     steps:
       - uses: actions/checkout@v4
 
@@ -20,13 +34,16 @@ jobs:
         with:
           ndk-version: r28c
 
-      - name: Build and package
+      # One package per game build: the profile is pinned at compile time.
+      - name: Build and package ${{ matrix.mcver }}
+        if: github.event.inputs.mcver == '' || github.event.inputs.mcver == 'all' || github.event.inputs.mcver == matrix.mcver
         run: |
-          xmake f -y -p android -a arm64-v8a -m release --ndk=${{ steps.ndk.outputs.ndk-path }}
+          xmake f -y -p android -a arm64-v8a -m release --ndk=${{ steps.ndk.outputs.ndk-path }} --mcver=${{ matrix.mcver }}
           xmake -y
 
       - uses: actions/upload-artifact@v4
+        if: github.event.inputs.mcver == '' || github.event.inputs.mcver == 'all' || github.event.inputs.mcver == matrix.mcver
         with:
-          name: CameraOverhaul-levipack
-          path: build/android/arm64-v8a/release/CameraOverhaul.levipack
+          name: CameraOverhaul-${{ matrix.mcver }}
+          path: build/android/arm64-v8a/release/CameraOverhaul-${{ matrix.mcver }}.levipack
           if-no-files-found: error

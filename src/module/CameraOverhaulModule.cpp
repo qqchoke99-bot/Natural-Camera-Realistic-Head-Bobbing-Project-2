@@ -3,6 +3,7 @@
 #include "CameraOverhaulModule.hpp"
 
 #include "core/memory/Hooks.hpp"
+#include <cameraoverhaul/Log.hpp>
 #include <cameraoverhaul/events/EventBus.hpp>
 #include <cameraoverhaul/events/LocalPlayerTickEvent.hpp>
 #include <cameraoverhaul/memory/Signatures.hpp>
@@ -11,6 +12,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <string>
 
 namespace {
 
@@ -23,14 +25,22 @@ constexpr float kVerticalPitchGain = 0.30f;
 constexpr float kPitchHalfLife = 0.060f;
 constexpr float kRollHalfLife = 0.075f;
 
-constexpr std::uintptr_t kRotationOffset = 0x28;
-
 struct Quat {
     float x, y, z, w;
 };
 
 float clampf(float v, float lo, float hi) {
     return v < lo ? lo : (v > hi ? hi : v);
+}
+
+// Cheap sanity check for values read through version-specific offsets. A
+// mismatch shows up as garbage coordinates long before it shows up as a crash.
+bool plausiblePosition(const cameraoverhaul::sdk::Vec3& position) {
+    if (!std::isfinite(position.x) || !std::isfinite(position.y) || !std::isfinite(position.z)) {
+        return false;
+    }
+    if (std::fabs(position.x) >= 3.0e7f || std::fabs(position.z) >= 3.0e7f) return false;
+    return position.y > -512.0f && position.y < 8192.0f;
 }
 
 float dampStep(float smoothing, float dt) {
@@ -135,10 +145,21 @@ struct CameraState {
     double lastTickTime = 0.0;
     double lastFrameTime = 0.0;
 
+    int  invalidTicks = 0;
+    bool warnedInvalidOffsets = false;
+
     void reset() { *this = CameraState{}; }
 };
 
 CameraState g_state;
+
+void noteInvalidSample(const char* reason) {
+    if (++g_state.invalidTicks < 40 || g_state.warnedInvalidOffsets) return;
+    g_state.warnedInvalidOffsets = true;
+    cameraoverhaul::logWarn(std::string("sdk: ") + reason + " for 40 ticks; the game profile " +
+                            std::string(cameraoverhaul::memory::targetVersion()) +
+                            " does not fit this build, camera effects stay off");
+}
 
 using CameraBlendTickFn = void (*)(void* component, void* blendState, float factor);
 CameraBlendTickFn _cameraBlendTick_orig = nullptr;
@@ -190,7 +211,8 @@ void CameraOverhaulModule::applyToCamera(void* cameraComponent) {
     if (!m_enabled || !cameraComponent) return;
 
     auto* quat = reinterpret_cast<Quat*>(
-        reinterpret_cast<std::uintptr_t>(cameraComponent) + kRotationOffset);
+        reinterpret_cast<std::uintptr_t>(cameraComponent) +
+        cameraoverhaul::sdk::offsets::cameraRotation());
 
     const float len = std::sqrt(quat->x * quat->x + quat->y * quat->y +
                                 quat->z * quat->z + quat->w * quat->w);
@@ -263,6 +285,26 @@ void CameraOverhaulModule::onTick(void* playerPtr) {
 
     auto* player = reinterpret_cast<cameraoverhaul::sdk::Player*>(playerPtr);
 
+    // Offsets come from the active GameProfile. Verify them every tick so a
+    // build with moved members produces no camera motion instead of nonsense.
+    if (!player->stateVectorComponent() || !player->rotationComponent()) {
+        noteInvalidSample("missing actor components");
+        return;
+    }
+
+    const cameraoverhaul::sdk::Vec3 pos = player->position();
+    if (!plausiblePosition(pos)) {
+        noteInvalidSample("implausible position");
+        return;
+    }
+
+    const cameraoverhaul::sdk::Vec2 rot = player->rotation();
+    if (!std::isfinite(rot.x) || !std::isfinite(rot.y)) {
+        noteInvalidSample("non-finite rotation");
+        return;
+    }
+    g_state.invalidTicks = 0;
+
     const double now = nowSeconds();
     float dt = 0.05f;
     if (g_state.lastTickTime > 0.0) {
@@ -271,7 +313,6 @@ void CameraOverhaulModule::onTick(void* playerPtr) {
     g_state.lastTickTime = now;
     dt = clampf(dt, 0.001f, 0.25f);
 
-    const cameraoverhaul::sdk::Vec3 pos = player->position();
     if (!g_state.hasLastPos) {
         g_state.lastPos = pos;
         g_state.hasLastPos = true;
@@ -289,7 +330,6 @@ void CameraOverhaulModule::onTick(void* playerPtr) {
     g_state.velocity.y += (rawVelocity.y - g_state.velocity.y) * blend;
     g_state.velocity.z += (rawVelocity.z - g_state.velocity.z) * blend;
 
-    const cameraoverhaul::sdk::Vec2 rot = player->rotation();
     const float yaw = rot.y;
     const float pitch = rot.x;
     if (!g_state.hasPrevYaw) {
