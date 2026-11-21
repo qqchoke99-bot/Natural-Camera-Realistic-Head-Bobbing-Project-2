@@ -74,6 +74,24 @@ jobs:
           print("::warning title=build tail::" + tail.replace("%", "%25").replace("\r", "").replace("\n", "%0A"))
           '
 
+      # The V2 schema call is a *weak undefined* symbol on purpose: preloaders
+      # older than the V2 API must still load the mod. LTO + hidden visibility
+      # could in principle strip that reference, so prove it survives.
+      - name: Check schema symbol is weak-undefined
+        if: steps.build.outcome == 'success'
+        run: |
+          so=$(find . -name "libRealisticHeadBob.so" | head -1)
+          echo "library: $so"
+          nm_bin="${{ steps.ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-nm"
+          line=$("$nm_bin" -D --undefined-only "$so" | grep setConfigSchemaJson || true)
+          if [ -z "$line" ]; then
+            echo "::error title=v2 schema symbol::weak reference to setConfigSchemaJson missing - LTO stripped it"
+            exit 1
+          fi
+          echo "::warning title=v2 schema symbol::$line"
+          "$nm_bin" -D --undefined-only "$so" | grep -E "registerModule|setConfigSchemaJson" || true
+          ls -l "$so"
+
       - name: Locate package
         if: steps.build.outcome == 'success'
         run: |
