@@ -72,8 +72,7 @@ jobs:
           mcver = sys.argv[1]
           log = pathlib.Path("build-" + mcver + ".log")
           text = log.read_text(errors="ignore") if log.exists() else "no log captured"
-          lines = [l for l in text.splitlines() if "error" in l.lower()]
-          tail = "\n".join(lines[-25:]) if lines else "\n".join(text.splitlines()[-25:])
+          tail = "\n".join(text.splitlines()[-40:])
           out = tail.replace("%", "%25").replace("\r", "").replace("\n", "%0A")
           print("::error title=build " + mcver + "::" + out)
           ' "${{ matrix.mcver }}"
