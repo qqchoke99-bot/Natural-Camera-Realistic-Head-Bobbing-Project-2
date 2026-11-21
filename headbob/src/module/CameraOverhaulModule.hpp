@@ -68,6 +68,15 @@ public:
     float       m_headBobSmoothHz = 1.75f;
     float       m_headBobDamping = 1.25f;
 
+    // Every preset carries its own strength, so switching preset changes how
+    // strong the bob is without touching the master strength.
+    float       m_headBobStrengthDefault = 1.00f;
+    float       m_headBobStrengthBodycam = 1.15f;
+    float       m_headBobStrengthComfort = 0.70f;
+    float       m_headBobStrengthCustom  = 1.00f;
+
+    float presetStrength(HeadBobMode mode) const;
+
 private:
     CameraOverhaulModule() = default;
 

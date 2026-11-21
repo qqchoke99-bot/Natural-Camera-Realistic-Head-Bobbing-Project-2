@@ -256,15 +256,16 @@ void CameraOverhaulModule::applyToCamera(void* cameraComponent) {
 
     // --- Realistic step head-bob (degrees -> radians) ---
     if (m_enableHeadBob) {
-        float g = m_headBobStrength;
+        // master strength x the strength owned by the active preset
+        float g = m_headBobStrength * presetStrength(m_headBobModeKind);
         float stepAmp = 1.0f;
         float rate = m_headBobStepRate;
         switch (m_headBobModeKind) {
             case HeadBobMode::Bodycam:
-                g *= 1.15f; stepAmp *= 1.10f; rate *= 1.05f;
+                stepAmp *= 1.10f; rate *= 1.05f;
                 break;
             case HeadBobMode::Comfort:
-                g *= 0.70f; stepAmp *= 0.75f; rate *= 0.95f;
+                stepAmp *= 0.75f; rate *= 0.95f;
                 break;
             case HeadBobMode::Default:
             case HeadBobMode::Custom:
@@ -408,6 +409,16 @@ void CameraOverhaulModule::onTick(void* playerPtr) {
     g_state.swayFade += (fadeTarget - g_state.swayFade) * fadeStep;
 }
 
+float CameraOverhaulModule::presetStrength(HeadBobMode mode) const {
+    switch (mode) {
+        case HeadBobMode::Bodycam: return clampf(m_headBobStrengthBodycam, 0.0f, 3.0f);
+        case HeadBobMode::Comfort: return clampf(m_headBobStrengthComfort, 0.0f, 3.0f);
+        case HeadBobMode::Custom:  return clampf(m_headBobStrengthCustom, 0.0f, 3.0f);
+        case HeadBobMode::Default:
+        default:                   return clampf(m_headBobStrengthDefault, 0.0f, 3.0f);
+    }
+}
+
 void CameraOverhaulModule::loadConfig(const nlohmann::json& j) {
     if (j.contains("enabled")) {
         const bool state = j["enabled"].get<bool>();
@@ -440,6 +451,11 @@ void CameraOverhaulModule::loadConfig(const nlohmann::json& j) {
     if (j.contains("headBobStepRate"))   m_headBobStepRate   = j["headBobStepRate"].get<float>();
     if (j.contains("headBobSmoothHz"))   m_headBobSmoothHz   = j["headBobSmoothHz"].get<float>();
     if (j.contains("headBobDamping"))    m_headBobDamping    = j["headBobDamping"].get<float>();
+
+    if (j.contains("headBobStrengthDefault")) m_headBobStrengthDefault = j["headBobStrengthDefault"].get<float>();
+    if (j.contains("headBobStrengthBodycam")) m_headBobStrengthBodycam = j["headBobStrengthBodycam"].get<float>();
+    if (j.contains("headBobStrengthComfort")) m_headBobStrengthComfort = j["headBobStrengthComfort"].get<float>();
+    if (j.contains("headBobStrengthCustom"))  m_headBobStrengthCustom  = j["headBobStrengthCustom"].get<float>();
 }
 
 
@@ -469,5 +485,10 @@ void CameraOverhaulModule::saveConfig(nlohmann::json& j) {
     j["headBobStepRate"]   = m_headBobStepRate;
     j["headBobSmoothHz"]   = m_headBobSmoothHz;
     j["headBobDamping"]    = m_headBobDamping;
+
+    j["headBobStrengthDefault"] = m_headBobStrengthDefault;
+    j["headBobStrengthBodycam"] = m_headBobStrengthBodycam;
+    j["headBobStrengthComfort"] = m_headBobStrengthComfort;
+    j["headBobStrengthCustom"]  = m_headBobStrengthCustom;
 }
 

@@ -12,6 +12,38 @@ constants, not runtime lookups.
 
 ---
 
+## Menu UI (Mod Menu v2)
+
+The module registers with the preloader Mod Menu and then submits a **V2 config
+schema** (`pl::modmenu::setConfigSchemaJson`), which is the modern card layout:
+
+- four categories - **Preset**, **Head Bob**, **Camera Motion**, **Advanced**
+- a sectioned layout with titles and per-control descriptions
+- the preset as a **segmented** choice instead of a plain radio row
+- sliders with real ranges, steps and units (`x`, `Hz`, `s`)
+- controls that grey out when their feature toggle is off (`enabled_when`)
+
+The V2 schema API landed on preloader main after the `0.2.3` release, so it is
+declared **weak** here: on a preloader that does not export it the symbol
+resolves to null, the call is skipped, and the mod keeps working on the flat V1
+entry list. Nothing fails to load either way.
+
+## Preset strengths
+
+Every preset carries its own strength, so switching preset changes the bob
+without touching the master strength:
+
+| Key | Default | Meaning |
+|---|---|---|
+| `headBobStrengthDefault` | 1.00 | used while the Default preset is active |
+| `headBobStrengthBodycam` | 1.15 | used while Bodycam is active |
+| `headBobStrengthComfort` | 0.70 | used while Comfort is active |
+| `headBobStrengthCustom` | 1.00 | used while Custom is active |
+
+Effective gain is `headBobStrength` (master) x the active preset's strength. The
+defaults reproduce the old hard-coded 1.15 / 0.70 exactly, so existing configs
+look identical until you move a slider.
+
 ## Performance
 
 The mod is not CPU bound: the whole per-frame camera maths is about 18 ns on a
