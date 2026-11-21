@@ -18,7 +18,6 @@
 namespace {
 
 constexpr float kPi = 3.14159265358979323846f;
-constexpr float kTwoPi = 2.0f * kPi;
 constexpr float kDeg2Rad = kPi / 180.0f;
 
 constexpr float kForwardPitchGain = 0.45f;
@@ -152,14 +151,6 @@ struct CameraState {
     float idleTime = 0.0f;
     float swayFade = 0.0f;
 
-    // Head bob: phase is driven by distance travelled, not by wall clock, so the
-    // dips land on footsteps and stop dead the moment the player stops.
-    float bobPhase = 0.0f;
-    float bobFade = 0.0f;
-    float bobTargetFade = 0.0f;
-    float bobSpeed = 0.0f;
-    bool  bobGrounded = true;
-
     cameraoverhaul::sdk::Vec3 lastPos{};
     cameraoverhaul::sdk::Vec3 velocity{};
     bool  hasLastPos = false;
@@ -280,31 +271,6 @@ void CameraOverhaulModule::applyToCamera(void* cameraComponent) {
         pitchBias += noise1D(t * freq, 420) * f * 0.35f * kDeg2Rad;
         yawBias   += noise1D(t * freq, 1337) * f * 0.35f * kDeg2Rad;
         rollBias  += noise1D(t * freq, 6969) * f * 0.50f * kDeg2Rad;
-    }
-
-    if (m_enableHeadBob && m_headBobIntensity > 0.0f) {
-        const float fadeLength = m_headBobFadeLength < 0.01f ? 0.01f : m_headBobFadeLength;
-        const float fadeStep = clampf(frameDt / fadeLength, 0.0f, 1.0f);
-        g_state.bobFade += (g_state.bobTargetFade - g_state.bobFade) * fadeStep;
-        g_state.bobFade = clampf(g_state.bobFade, 0.0f, 1.0f);
-
-        if (g_state.bobFade > 0.0005f) {
-            const float stepDistance = m_headBobStepDistance < 0.2f ? 0.2f : m_headBobStepDistance;
-            g_state.bobPhase += (g_state.bobSpeed / stepDistance) * kTwoPi * frameDt;
-            if (g_state.bobPhase > kTwoPi * 1024.0f) {
-                g_state.bobPhase = std::fmod(g_state.bobPhase, kTwoPi);
-            }
-
-            // Faster ground speed reads as a heavier gait, but only mildly.
-            const float gait = clampf(g_state.bobSpeed / 4.3f, 0.55f, 1.25f);
-            const float amp = m_headBobIntensity * g_state.bobFade * gait;
-
-            pitchBias += std::sin(g_state.bobPhase) * 0.55f * amp * kDeg2Rad;
-            yawBias   += std::cos(g_state.bobPhase) * 0.30f * amp * kDeg2Rad;
-            if (m_enableRoll) {
-                rollBias += std::cos(g_state.bobPhase) * 0.22f * amp * kDeg2Rad;
-            }
-        }
     }
 
     if (!std::isfinite(pitchBias) || !std::isfinite(yawBias) || !std::isfinite(rollBias)) {
@@ -435,14 +401,6 @@ void CameraOverhaulModule::onTick(void* playerPtr) {
 
     const float speed = std::sqrt(g_state.velocity.x * g_state.velocity.x +
                                   g_state.velocity.z * g_state.velocity.z);
-
-    // A grounded Bedrock actor still reports a small negative vertical delta
-    // every tick (gravity applied, then resolved by collision), so "on ground"
-    // cannot mean "vertical speed is zero". It means "not falling properly".
-    g_state.bobSpeed = speed;
-    g_state.bobGrounded = g_state.velocity.y > -3.0f;
-    g_state.bobTargetFade = (speed > 0.35f && g_state.bobGrounded) ? 1.0f : 0.0f;
-
     if (speed < 0.05f) {
         g_state.idleTime += dt;
     } else {
@@ -480,10 +438,6 @@ void CameraOverhaulModule::loadConfig(const nlohmann::json& j) {
     if (j.contains("swayFadeInDelay"))         m_swayFadeInDelay         = j["swayFadeInDelay"].get<float>();
     if (j.contains("swayFadeInLength"))        m_swayFadeInLength        = j["swayFadeInLength"].get<float>();
     if (j.contains("swayFadeOutLength"))       m_swayFadeOutLength       = j["swayFadeOutLength"].get<float>();
-    if (j.contains("enableHeadBob"))           m_enableHeadBob           = j["enableHeadBob"].get<bool>();
-    if (j.contains("headBobIntensity"))        m_headBobIntensity        = j["headBobIntensity"].get<float>();
-    if (j.contains("headBobStepDistance"))     m_headBobStepDistance     = j["headBobStepDistance"].get<float>();
-    if (j.contains("headBobFadeLength"))       m_headBobFadeLength       = j["headBobFadeLength"].get<float>();
     if (j.contains("transitionSmoothing"))     m_transitionSmoothing     = j["transitionSmoothing"].get<float>();
 }
 
@@ -505,9 +459,5 @@ void CameraOverhaulModule::saveConfig(nlohmann::json& j) {
     j["swayFadeInDelay"]         = m_swayFadeInDelay;
     j["swayFadeInLength"]        = m_swayFadeInLength;
     j["swayFadeOutLength"]       = m_swayFadeOutLength;
-    j["enableHeadBob"]           = m_enableHeadBob;
-    j["headBobIntensity"]        = m_headBobIntensity;
-    j["headBobStepDistance"]     = m_headBobStepDistance;
-    j["headBobFadeLength"]       = m_headBobFadeLength;
     j["transitionSmoothing"]     = m_transitionSmoothing;
 }

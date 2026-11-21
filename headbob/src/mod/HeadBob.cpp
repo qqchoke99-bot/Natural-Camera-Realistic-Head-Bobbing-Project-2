@@ -99,9 +99,16 @@ CameraDelta update(State& s,
     if (s.bobFade < 1e-4f && !cfg.idleEnabled)
         return d;
 
-    // ---- step phase (movement-synced) ----
-    const float stepFreq = 1.7f * cfg.stepRate * (0.6f + s.speedSmooth * 0.8f);
-    const float phase    = gameTime * stepFreq * 6.2831855f;
+    // ---- step phase (distance-synced) ----
+    // The old code ran the phase off the clock at 1.7 * (0.6 + speed * 0.8) Hz:
+    // 6.9 Hz at walking speed, i.e. three steps where the player takes one - it
+    // feels like a buzz, not like footfalls. Advance the phase by the distance
+    // actually walked instead, so one dip lands on one stride.
+    constexpr float kBlocksPerStep = 1.6f;
+    constexpr float kTwoPi = 6.2831855f;
+    s.stepPhase += (s.speedSmooth / kBlocksPerStep) * kTwoPi * cfg.stepRate * dt;
+    if (s.stepPhase > kTwoPi * 1024.f) s.stepPhase = std::fmod(s.stepPhase, kTwoPi);
+    const float phase = s.stepPhase;
 
     const float stepSin = std::sin(phase);
     const float stepCos = std::cos(phase);

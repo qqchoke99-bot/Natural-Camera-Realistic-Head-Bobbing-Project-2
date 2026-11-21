@@ -18,7 +18,7 @@ struct Config {
 
     Mode  mode              = Mode::Bodycam;
 
-    float globalStrength    = 0.32f;
+    float globalStrength    = 0.55f;
     float walkMult          = 1.0f;
     float runMult           = 1.25f;
     float stepStrength      = 1.0f;

@@ -1,15 +1,32 @@
 # Realistic Head Bob
 
-> **Superseded.** The step bob now lives inside CameraOverhaul (`enableHeadBob`,
-> on by default). This standalone package is kept for reference; running both
-> stacks two bob effects. The fix below is still applied so it is not left
-> broken on its own.
+Standalone step-bob mod, revived from `qqchoke99-bot/1xmake.lua` 1.0.0 for
+Minecraft Bedrock 1.26.62 (and 1.26.50).
 
 FPS-style step head bob for Minecraft Bedrock on Android (LeviLauncher).
 Camera dips and sways in step with your walk cycle, springs back when you stop,
 and drifts gently while you stand still.
 
 This is the revived version of `qqchoke99-bot/1xmake.lua` (1.0.0).
+
+## Signatures, verified on 1.26.62
+
+Both patterns were matched against the shipped `libminecraftpe.so` with their
+wildcards, not just pasted from another mod - each has exactly **one** hit:
+
+| Function | Pattern hits | Static RVA | Your in-game log |
+|---|---|---|---|
+| `CameraBlendSystemTick` (camera path, from CameraOverhaul) | 1 | `0x11EA58CC` | `0x6c591e98cc` |
+| `NormalTick` (local player tick, this mod's velocity source) | 1 | `0xAF5E7A0` | `0x6c522a27a0` |
+
+Both runtime addresses minus their RVAs give the same module base
+(`0x6C47344000`), so each hook landed exactly on the function found statically.
+
+`CameraBlendSystemTick` is the same function CameraOverhaul hooks - that part is
+solved code, reused. The player-tick pattern is this mod's own, because the bob
+needs velocity and CameraOverhaul never needed a second hook.
+
+Rebuild the table any time with `scripts/verify_signatures.py <libminecraftpe.so>`.
 
 ## What was broken in 1.0.0
 
@@ -31,6 +48,8 @@ Both are fixed:
 | velocity | hard-coded `0` | derived from the local player's position each tick |
 | `onGround` | always `true` | `|vertical speed| < 0.8 b/s` |
 | sprint detection | always `false` | `speed > 5.0 b/s` (walk ≈ 4.3, sprint ≈ 5.6) |
+| `onGround` | always `true` | not falling faster than `3 b/s` |
+| step phase | `1.7 * (0.6 + speed * 0.8)` Hz | distance-synced, 1.6 blocks per dip |
 | `dt` | fixed `1/60` | measured per frame, clamped to `[1 ms, 100 ms]` |
 
 The bob math in `HeadBob.cpp` is untouched — the spring-damper port from the
