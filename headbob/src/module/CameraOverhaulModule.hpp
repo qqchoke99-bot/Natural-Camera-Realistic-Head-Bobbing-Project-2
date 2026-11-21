@@ -1,11 +1,23 @@
 #pragma once
 
 #include <nlohmann/json.hpp>
+#include <cstdint>
 #include <string>
 #include <string_view>
 
 class CameraOverhaulModule {
 public:
+    // Parsed once when the config is applied; the frame path must not compare
+    // std::strings 60-120 times a second.
+    enum class HeadBobMode : std::uint8_t { Default, Bodycam, Comfort, Custom };
+
+    static HeadBobMode parseHeadBobMode(std::string_view value) {
+        if (value == "bodycam") return HeadBobMode::Bodycam;
+        if (value == "comfort") return HeadBobMode::Comfort;
+        if (value == "custom")  return HeadBobMode::Custom;
+        return HeadBobMode::Default;
+    }
+
     static CameraOverhaulModule& get();
 
     static constexpr std::string_view name = "RealisticHeadBob";
@@ -50,6 +62,7 @@ public:
     // --- realistic step head-bob ---
     bool        m_enableHeadBob = true;
     std::string m_headBobMode = "bodycam"; // default | bodycam | comfort | custom
+    HeadBobMode m_headBobModeKind = HeadBobMode::Bodycam;
     float       m_headBobStrength = 1.0f;
     float       m_headBobStepRate = 1.0f;
     float       m_headBobSmoothHz = 1.75f;

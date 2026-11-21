@@ -259,10 +259,17 @@ void CameraOverhaulModule::applyToCamera(void* cameraComponent) {
         float g = m_headBobStrength;
         float stepAmp = 1.0f;
         float rate = m_headBobStepRate;
-        if (m_headBobMode == "bodycam") {
-            g *= 1.15f; stepAmp *= 1.10f; rate *= 1.05f;
-        } else if (m_headBobMode == "comfort") {
-            g *= 0.70f; stepAmp *= 0.75f; rate *= 0.95f;
+        switch (m_headBobModeKind) {
+            case HeadBobMode::Bodycam:
+                g *= 1.15f; stepAmp *= 1.10f; rate *= 1.05f;
+                break;
+            case HeadBobMode::Comfort:
+                g *= 0.70f; stepAmp *= 0.75f; rate *= 0.95f;
+                break;
+            case HeadBobMode::Default:
+            case HeadBobMode::Custom:
+            default:
+                break;
         }
 
         const float speed = std::sqrt(g_state.velocity.x * g_state.velocity.x +
@@ -425,7 +432,10 @@ void CameraOverhaulModule::loadConfig(const nlohmann::json& j) {
     if (j.contains("transitionSmoothing"))     m_transitionSmoothing     = j["transitionSmoothing"].get<float>();
 
     if (j.contains("enableHeadBob"))     m_enableHeadBob     = j["enableHeadBob"].get<bool>();
-    if (j.contains("headBobMode"))       m_headBobMode       = j["headBobMode"].get<std::string>();
+    if (j.contains("headBobMode")) {
+        m_headBobMode = j["headBobMode"].get<std::string>();
+        m_headBobModeKind = parseHeadBobMode(m_headBobMode);
+    }
     if (j.contains("headBobStrength"))   m_headBobStrength   = j["headBobStrength"].get<float>();
     if (j.contains("headBobStepRate"))   m_headBobStepRate   = j["headBobStepRate"].get<float>();
     if (j.contains("headBobSmoothHz"))   m_headBobSmoothHz   = j["headBobSmoothHz"].get<float>();

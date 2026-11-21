@@ -12,6 +12,30 @@ constants, not runtime lookups.
 
 ---
 
+## Performance
+
+The mod is not CPU bound: the whole per-frame camera maths is about 18 ns on a
+host core (two springs + two sines), which is nothing against a frame budget. So
+this pass targets *jitter* - work the render thread should never do - rather
+than frame rate.
+
+| Change | Before | After | Effect |
+|---|---|---|---|
+| `EventBus::publish` with a listener | 30.3 ns, one heap allocation + `std::function` copy per publish | 2.4 ns, lock-free atomic load | removes allocator traffic from the tick path |
+| `EventBus::publish` with no listener | 21.9 ns (shared_mutex + hash lookup) | 0.6 ns | the eglSwapBuffers detour publishes `FrameEvent` every frame and nothing subscribes |
+| `headBobMode` check in the frame path | 3.1 ns, `std::string` vs literal, twice | 1.2 ns, cached enum | parsed once in `loadConfig` |
+| `-Oz` vs `-O2` for the target | 18.5 ns per frame | 18.2 ns | **not worth it** - kept `-Oz`; the cost is libm, not codegen |
+
+Measured with `eventbus`/`math` micro-benchmarks on the host; the publish numbers
+are per call, so at 20 ticks + 120 frames per second the saving is sub-microsecond
+per second. It is a correctness-of-design win (no allocation, no lock on the
+render thread), not a speedup you would feel.
+
+Publishing is now lock-free in the read direction: each event type holds an
+atomic pointer to an immutable listener list, rebuilt copy-on-write on
+subscribe/unsubscribe, with replaced lists kept alive so a publisher walking an
+old list never touches freed memory.
+
 ## Changes from the supplied v2 tree
 
 Signatures are **not** among them: both patterns already match the 1.26.62
@@ -23,6 +47,8 @@ library once each, so they are byte-for-byte as you wrote them.
 | `include/cameraoverhaul/Version.hpp` | `2.0.0-1.26.62`, description mentions 1.26.62 | version string feeds the manifest |
 | `levimod.json` | `2.0.0-1.26.62`, `minecraft_versions: ["1.26.62.1"]` | one package per build; the offsets are compile-time constants |
 | `src/launcher/ModMenu.cpp` | dropped the inline Radio option list from the `headBobMode` entry | `ModuleBuilder::config` takes at most 7 arguments in every released preloader - the 8-argument call never compiled |
+| `include/cameraoverhaul/events/EventBus.hpp` | lock-free, allocation-free publish | see Performance above |
+| `src/module/CameraOverhaulModule.{hpp,cpp}` | `headBobMode` parsed into an enum on config load | no `std::string` comparisons in the frame path |
 
 Everything else - the bob maths, the mode presets, the config keys, the
 cinematic pitch/roll/sway, the packaging script, the icon - is untouched.
