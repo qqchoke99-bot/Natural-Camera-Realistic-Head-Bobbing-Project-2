@@ -56,6 +56,20 @@ jobs:
           '
           exit 1
 
+      - name: Log tail
+        if: always()
+        run: |
+          python3 -c '
+          import pathlib
+          text = ""
+          for name in ("headbob/build-config.log", "headbob/build.log"):
+              p = pathlib.Path(name)
+              if p.exists():
+                  text += p.read_text(errors="ignore")
+          tail = "\n".join(text.splitlines()[-30:]) if text else "no logs"
+          print("::warning title=build tail::" + tail.replace("%", "%25").replace("\r", "").replace("\n", "%0A"))
+          '
+
       - name: Locate package
         if: steps.build.outcome == 'success'
         run: |
