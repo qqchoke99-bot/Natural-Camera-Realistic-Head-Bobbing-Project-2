@@ -32,11 +32,12 @@ jobs:
       - name: Build and package
         id: build
         continue-on-error: true
-        working-directory: headbob
         run: |
+          # -P: build headbob/ as its own project. Without it xmake finds this
+          # repository's root xmake.lua and builds CameraOverhaul instead.
           set -o pipefail
-          xmake f -y -p android -a arm64-v8a -m release --ndk=${{ steps.ndk.outputs.ndk-path }} 2>&1 | tee build-config.log
-          xmake -y -v 2>&1 | tee build.log
+          xmake f -y -P headbob -p android -a arm64-v8a -m release --ndk=${{ steps.ndk.outputs.ndk-path }} 2>&1 | tee headbob/build-config.log
+          xmake -y -P headbob -v 2>&1 | tee headbob/build.log
 
       # run logs live on storage some clients cannot reach, so republish the tail
       # of the failure as an annotation (readable through the check-runs API).
