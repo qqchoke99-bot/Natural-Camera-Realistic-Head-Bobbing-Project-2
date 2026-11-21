@@ -67,6 +67,9 @@ configure_file(
 )
 
 # ---- Package target ----
+# make chdir()s into WORKING_DIRECTORY before running any command, so the
+# directory has to exist at configure time.
+file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/package)
 add_custom_target(levi_package
     COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/package/${MOD_ID}
     COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:${MOD_LIBRARY_NAME}> ${CMAKE_BINARY_DIR}/package/${MOD_ID}/
