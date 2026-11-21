@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "id": "cameraoverhaul",
-  "version": "1.1.4-beta",
+  "version": "1.1.5-beta",
   "minecraft_versions": [
     "1.26.50.1",
     "1.26.62.1"
