@@ -4,7 +4,7 @@
   "enableWhenMounted": false,
   "enableThirdPerson": false,
   "mode": "bodycam",
-  "globalStrength": 0.55,
+  "globalStrength": 0.32,
   "walkMult": 1,
   "runMult": 1.25,
   "stepStrength": 1,

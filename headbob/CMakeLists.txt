@@ -22,7 +22,7 @@ endif()
 set(MOD_ID                 "realistic_headbob"            CACHE STRING "Runtime mod id / folder name")
 set(MOD_NAME               "Realistic Head Bob"           CACHE STRING "Display name")
 set(MOD_AUTHOR             "qqchoke99"                    CACHE STRING "Author")
-set(MOD_VERSION            "1.1.2-${MCVER}"               CACHE STRING "Version")
+set(MOD_VERSION            "1.0.0-${MCVER}"               CACHE STRING "Version")
 set(MOD_LIBRARY_NAME       "realistic_headbob"            CACHE STRING "Output .so base name (libXXX.so)")
 set(MOD_MINECRAFT_VERSIONS "[\"${MCVER}.1\"]"             CACHE STRING "JSON array of supported MC versions")
 set(MOD_DESCRIPTION        "FPS-style step head bob for Bedrock: camera dip and sway locked to your walk cycle, with idle breathing" CACHE STRING "")
@@ -39,7 +39,7 @@ FetchContent_MakeAvailable(preloader_android)
 # ---- Sources ----
 add_library(${MOD_LIBRARY_NAME} SHARED
     src/main.cpp
-    src/mod/Mod.cpp
+    src/mod/MyMod.cpp
     src/mod/Config.cpp
     src/mod/HeadBob.cpp
 )

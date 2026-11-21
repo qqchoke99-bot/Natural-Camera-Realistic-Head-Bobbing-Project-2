@@ -11,7 +11,6 @@ struct State {
     float pitchOut    = 0.f;
     float pitchVel    = 0.f;
     int   airTicks    = 0;
-    float stepPhase   = 0.f;  // radians, advanced by distance walked
 };
 
 struct CameraDelta {
