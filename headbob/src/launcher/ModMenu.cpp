@@ -110,8 +110,10 @@ void registerWithLauncher() {
 
     (void)builder.config("enableHeadBob", "Head Bob", ConfigType::Toggle,
                    mod.m_enableHeadBob ? "true" : "false")
-        .config("headBobMode", "Head Bob Mode", ConfigType::Radio, mod.m_headBobMode,
-                "default", "bodycam", "comfort", "custom")
+        // pl::modmenu::ModuleBuilder::config takes at most 7 arguments in every
+        // released preloader, so the inline Radio options cannot be expressed
+        // here; the mode still lives in config.json as headBobMode.
+        .config("headBobMode", "Head Bob Mode", ConfigType::Radio, mod.m_headBobMode)
         .config("headBobStrength", "Head Bob Strength", ConfigType::SliderFloat,
                f(mod.m_headBobStrength), "0.0", "3.0", "enableHeadBob")
         .config("headBobStepRate", "Step Rate", ConfigType::SliderFloat,
