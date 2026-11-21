@@ -27,6 +27,7 @@ import argparse
 import json
 import re
 import sys
+import zipfile
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -203,9 +204,22 @@ def dump_at(elf, rva, length):
     return lines
 
 
+def load_library(path):
+    """Read a .so, or pull libminecraftpe.so out of an APK / zip that holds it."""
+    if path.suffix.lower() in (".zip", ".apk", ".levipack"):
+        with zipfile.ZipFile(path) as archive:
+            entries = [name for name in archive.namelist() if name.endswith("libminecraftpe.so")]
+            if not entries:
+                raise ElfError(f"{path.name} has no libminecraftpe.so entry")
+            entries.sort(key=lambda name: (0 if ("arm64" in name or "aarch64" in name) else 1, name))
+            return archive.read(entries[0]), entries[0]
+    return path.read_bytes(), path.name
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--library", required=True, type=Path, help="libminecraftpe.so to check")
+    parser.add_argument("--library", required=True, type=Path,
+                        help="libminecraftpe.so, or a zip/apk containing it")
     parser.add_argument("--header", type=Path, default=DEFAULT_HEADER, help="GameProfiles.hpp (default: %(default)s)")
     parser.add_argument("--pattern", action="append", default=[], help="extra ad-hoc pattern to scan")
     parser.add_argument("--dump", nargs=2, metavar=("RVA", "LENGTH"), type=lambda value: int(value, 0),
@@ -214,8 +228,9 @@ def main(argv=None):
     args = parser.parse_args(argv)
 
     try:
-        elf = Elf(args.library.read_bytes())
-    except (OSError, ElfError) as error:
+        blob, entry_name = load_library(args.library)
+        elf = Elf(blob)
+    except (OSError, zipfile.BadZipFile, ElfError) as error:
         print(f"cannot read {args.library}: {error}", file=sys.stderr)
         return 2
 
@@ -237,7 +252,8 @@ def main(argv=None):
         print(f"cannot parse {args.header}: {error}", file=sys.stderr)
         return 2
 
-    results = {"library": str(args.library), "machine": machine, "profiles": [], "patterns": []}
+    results = {"library": str(args.library), "entry": entry_name, "machine": machine,
+               "profiles": [], "patterns": []}
     ok = True
     for profile in profiles:
         entry = {"version": profile["version"], "offsets": describe_offsets(profile["offsets"]),
@@ -276,6 +292,8 @@ def main(argv=None):
         return 0 if ok else 1
 
     print(f"library : {args.library}")
+    if entry_name != args.library.name:
+        print(f"entry   : {entry_name}")
     print(f"machine : {machine}")
     print(f"size    : {len(elf.data):,} bytes, {len(elf.executable_segments())} executable segment(s)")
     for entry in results["profiles"]:
