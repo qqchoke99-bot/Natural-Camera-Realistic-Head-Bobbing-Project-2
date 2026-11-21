@@ -126,6 +126,11 @@ ConfigNodeV2 info(std::string id, std::string category, std::string title, std::
     return node;
 }
 
+void greyOutUnless(ConfigNodeV2& node, std::string key, std::string value) {
+    node.enabledWhen.push_back(ConfigConditionV2{std::move(key), ConfigConditionOpV2::Equals,
+                                                 std::move(value)});
+}
+
 void greyOutWithout(ConfigNodeV2& node, std::string key) {
     node.enabledWhen.push_back(ConfigConditionV2{std::move(key), ConfigConditionOpV2::Truthy, {}});
 }
@@ -148,7 +153,9 @@ std::string buildSchemaJson() {
 
     auto preset = makeNode("headBobMode", "headBobMode", "profile", "Preset",
                            ConfigControlTypeV2::Choice);
-    preset.description = "Default is neutral, Bodycam is the strongest, Comfort is the softest.";
+    preset.description =
+            "Default, Bodycam and Comfort are fixed recipes (only their strength is editable). "
+            "Custom applies the tuning sliders you set yourself.";
     preset.choiceStyle = ConfigChoiceStyleV2::Segmented;
     preset.options = {
             ConfigOptionV2{.value = "default", .label = "Default", .description = "Neutral walking bob"},
@@ -161,16 +168,24 @@ std::string buildSchemaJson() {
     schema.node(section("sec_strength", "profile", "Strength per preset"));
 
     auto strengthDefault = slider("headBobStrengthDefault", "headBobStrengthDefault", "profile",
-                                  "Default strength", "Applied while the Default preset is active.",
+                                  "Default strength",
+                                  "Applied while the Default preset is active. The rest of the "
+                                  "Default recipe is fixed.",
                                   "0.0", "3.0", "0.05", "x");
     auto strengthBodycam = slider("headBobStrengthBodycam", "headBobStrengthBodycam", "profile",
-                                  "Bodycam strength", "Applied while the Bodycam preset is active.",
+                                  "Bodycam strength",
+                                  "Applied while the Bodycam preset is active. The rest of its "
+                                  "recipe is fixed.",
                                   "0.0", "3.0", "0.05", "x");
     auto strengthComfort = slider("headBobStrengthComfort", "headBobStrengthComfort", "profile",
-                                  "Comfort strength", "Applied while the Comfort preset is active.",
+                                  "Comfort strength",
+                                  "Applied while the Comfort preset is active. The rest of its "
+                                  "recipe is fixed.",
                                   "0.0", "3.0", "0.05", "x");
     auto strengthCustom = slider("headBobStrengthCustom", "headBobStrengthCustom", "profile",
-                                 "Custom strength", "Applied while the Custom preset is active.",
+                                 "Custom strength",
+                                 "Applied while the Custom preset is active, on top of the "
+                                 "tuning sliders below.",
                                  "0.0", "3.0", "0.05", "x");
     schema.node(std::move(strengthDefault));
     schema.node(std::move(strengthBodycam));
@@ -190,22 +205,31 @@ std::string buildSchemaJson() {
     greyOutWithout(master, "enableHeadBob");
     schema.node(std::move(master));
 
+    schema.node(section("sec_custom", "headbob", "Custom tuning"));
+    schema.node(info("info_custom", "headbob", "Custom preset only",
+                     "These three sliders are read by the Custom preset. Default, Bodycam and "
+                     "Comfort keep their own baked-in rhythm, so they stay consistent no matter "
+                     "what you set here - switch the preset to Custom to feel the difference."));
+
     auto stepRate = slider("headBobStepRate", "headBobStepRate", "headbob", "Step rate",
                            "How fast the step cycle runs while you walk.",
                            "0.25", "2.5", "0.05", "x");
     greyOutWithout(stepRate, "enableHeadBob");
+    greyOutUnless(stepRate, "headBobMode", "custom");
     schema.node(std::move(stepRate));
 
     auto smoothHz = slider("headBobSmoothHz", "headBobSmoothHz", "headbob", "Spring frequency",
                            "Lower is looser and floatier, higher is snappier.",
                            "0.5", "6.0", "0.05", "Hz");
     greyOutWithout(smoothHz, "enableHeadBob");
+    greyOutUnless(smoothHz, "headBobMode", "custom");
     schema.node(std::move(smoothHz));
 
     auto damping = slider("headBobDamping", "headBobDamping", "headbob", "Spring damping",
                           "Below 1.0 overshoots once, above 1.0 settles flat.",
                           "0.2", "3.0", "0.05", "");
     greyOutWithout(damping, "enableHeadBob");
+    greyOutUnless(damping, "headBobMode", "custom");
     schema.node(std::move(damping));
 
     // --- Camera motion --------------------------------------------------
@@ -361,11 +385,11 @@ void registerWithLauncher() {
     builder.config("headBobMode", "Head Bob Mode", ConfigType::Radio, mod.m_headBobMode);
     builder.config("headBobStrength", "Head Bob Strength", ConfigType::SliderFloat,
                    f(mod.m_headBobStrength), "0.0", "3.0", "enableHeadBob");
-    builder.config("headBobStepRate", "Step Rate", ConfigType::SliderFloat,
+    builder.config("headBobStepRate", "Step Rate (Custom preset)", ConfigType::SliderFloat,
                    f(mod.m_headBobStepRate), "0.25", "2.5", "enableHeadBob");
-    builder.config("headBobSmoothHz", "Spring Frequency", ConfigType::SliderFloat,
+    builder.config("headBobSmoothHz", "Spring Frequency (Custom preset)", ConfigType::SliderFloat,
                    f(mod.m_headBobSmoothHz), "0.5", "6.0", "enableHeadBob");
-    builder.config("headBobDamping", "Spring Damping", ConfigType::SliderFloat,
+    builder.config("headBobDamping", "Spring Damping (Custom preset)", ConfigType::SliderFloat,
                    f(mod.m_headBobDamping), "0.2", "3.0", "enableHeadBob");
 
     builder.config("headBobStrengthDefault", "Default Preset Strength", ConfigType::SliderFloat,

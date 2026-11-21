@@ -75,7 +75,17 @@ public:
     float       m_headBobStrengthComfort = 0.70f;
     float       m_headBobStrengthCustom  = 1.00f;
 
-    float presetStrength(HeadBobMode mode) const;
+    // What a preset actually applies. Default / Bodycam / Comfort are fixed
+    // recipes (only their strength is editable); Custom reads the live sliders.
+    struct HeadBobRecipe {
+        float strength;  // preset strength, before the master gain
+        float stepAmp;
+        float rate;
+        float smoothHz;
+        float damping;
+    };
+
+    HeadBobRecipe headBobRecipe() const;
 
 private:
     CameraOverhaulModule() = default;

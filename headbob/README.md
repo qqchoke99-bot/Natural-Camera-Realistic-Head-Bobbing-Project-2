@@ -44,6 +44,21 @@ Effective gain is `headBobStrength` (master) x the active preset's strength. The
 defaults reproduce the old hard-coded 1.15 / 0.70 exactly, so existing configs
 look identical until you move a slider.
 
+**Presets are fixed recipes; Custom is the one you build.** Each preset resolves
+to a full recipe - strength, step amplitude, step rate, spring frequency,
+damping:
+
+| Preset | Strength | Step amp | Step rate | Spring Hz | Damping |
+|---|---|---|---|---|---|
+| Default | 1.00 | 1.00 | 1.00 | 1.75 | 1.25 |
+| Bodycam | 1.15 | 1.10 | 1.05 | 1.75 | 1.25 |
+| Comfort | 0.70 | 0.75 | 0.95 | 1.75 | 1.25 |
+| Custom | 1.00 | 1.00 | `headBobStepRate` | `headBobSmoothHz` | `headBobDamping` |
+
+Only the strength column is editable for the three built-in presets, so they
+always feel the same. The step rate / spring / damping sliders are read by
+**Custom** alone and grey out in the menu unless Custom is selected.
+
 ## Performance
 
 The mod is not CPU bound: the whole per-frame camera maths is about 18 ns on a

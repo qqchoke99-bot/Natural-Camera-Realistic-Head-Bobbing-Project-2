@@ -256,22 +256,11 @@ void CameraOverhaulModule::applyToCamera(void* cameraComponent) {
 
     // --- Realistic step head-bob (degrees -> radians) ---
     if (m_enableHeadBob) {
-        // master strength x the strength owned by the active preset
-        float g = m_headBobStrength * presetStrength(m_headBobModeKind);
-        float stepAmp = 1.0f;
-        float rate = m_headBobStepRate;
-        switch (m_headBobModeKind) {
-            case HeadBobMode::Bodycam:
-                stepAmp *= 1.10f; rate *= 1.05f;
-                break;
-            case HeadBobMode::Comfort:
-                stepAmp *= 0.75f; rate *= 0.95f;
-                break;
-            case HeadBobMode::Default:
-            case HeadBobMode::Custom:
-            default:
-                break;
-        }
+        // preset recipe x the master strength
+        const HeadBobRecipe recipe = headBobRecipe();
+        const float g = m_headBobStrength * recipe.strength;
+        const float stepAmp = recipe.stepAmp;
+        const float rate = recipe.rate;
 
         const float speed = std::sqrt(g_state.velocity.x * g_state.velocity.x +
                                       g_state.velocity.z * g_state.velocity.z);
@@ -284,9 +273,9 @@ void CameraOverhaulModule::applyToCamera(void* cameraComponent) {
         const float targetPitch = -std::sin(phase * 2.0f) * 1.15f * stepAmp * walkFactor * g;
         const float targetYaw   =  std::sin(phase) * 0.85f * stepAmp * walkFactor * g;
         springDamper(g_state.bobPitch, g_state.bobPitchVel, targetPitch, frameDt,
-                     m_headBobSmoothHz, m_headBobDamping);
+                     recipe.smoothHz, recipe.damping);
         springDamper(g_state.bobYaw, g_state.bobYawVel, targetYaw, frameDt,
-                     m_headBobSmoothHz, m_headBobDamping);
+                     recipe.smoothHz, recipe.damping);
         pitchBias += g_state.bobPitch * kDeg2Rad;
         yawBias   += g_state.bobYaw * kDeg2Rad;
     }
@@ -409,13 +398,23 @@ void CameraOverhaulModule::onTick(void* playerPtr) {
     g_state.swayFade += (fadeTarget - g_state.swayFade) * fadeStep;
 }
 
-float CameraOverhaulModule::presetStrength(HeadBobMode mode) const {
-    switch (mode) {
-        case HeadBobMode::Bodycam: return clampf(m_headBobStrengthBodycam, 0.0f, 3.0f);
-        case HeadBobMode::Comfort: return clampf(m_headBobStrengthComfort, 0.0f, 3.0f);
-        case HeadBobMode::Custom:  return clampf(m_headBobStrengthCustom, 0.0f, 3.0f);
+CameraOverhaulModule::HeadBobRecipe CameraOverhaulModule::headBobRecipe() const {
+    // Default / Bodycam / Comfort are fixed recipes: strength comes from their
+    // own slider, the rhythm is baked in so a preset always feels the same.
+    // Custom is the one you build yourself, so it reads the rhythm sliders.
+    switch (m_headBobModeKind) {
+        case HeadBobMode::Bodycam:
+            return {clampf(m_headBobStrengthBodycam, 0.0f, 3.0f), 1.10f, 1.05f, 1.75f, 1.25f};
+        case HeadBobMode::Comfort:
+            return {clampf(m_headBobStrengthComfort, 0.0f, 3.0f), 0.75f, 0.95f, 1.75f, 1.25f};
+        case HeadBobMode::Custom:
+            return {clampf(m_headBobStrengthCustom, 0.0f, 3.0f), 1.00f,
+                    clampf(m_headBobStepRate, 0.05f, 10.0f),
+                    clampf(m_headBobSmoothHz, 0.1f, 12.0f),
+                    clampf(m_headBobDamping, 0.05f, 3.0f)};
         case HeadBobMode::Default:
-        default:                   return clampf(m_headBobStrengthDefault, 0.0f, 3.0f);
+        default:
+            return {clampf(m_headBobStrengthDefault, 0.0f, 3.0f), 1.00f, 1.00f, 1.75f, 1.25f};
     }
 }
 
