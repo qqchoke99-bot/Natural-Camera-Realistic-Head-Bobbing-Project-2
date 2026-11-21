@@ -24,6 +24,16 @@ __attribute__((weak)) void clearConfigSchema(std::string_view moduleId);
 
 namespace {
 
+std::string modeName(CameraOverhaulModule::HeadBobMode kind) {
+    switch (kind) {
+        case CameraOverhaulModule::HeadBobMode::Bodycam: return "bodycam";
+        case CameraOverhaulModule::HeadBobMode::Comfort: return "comfort";
+        case CameraOverhaulModule::HeadBobMode::Custom:  return "custom";
+        case CameraOverhaulModule::HeadBobMode::Default:
+        default:                                          return "default";
+    }
+}
+
 using pl::modmenu::ConfigChoiceStyleV2;
 using pl::modmenu::ConfigConditionV2;
 using pl::modmenu::ConfigConditionOpV2;
@@ -31,6 +41,8 @@ using pl::modmenu::ConfigControlTypeV2;
 using pl::modmenu::ConfigNodeV2;
 using pl::modmenu::ConfigOptionV2;
 using pl::modmenu::ConfigSchemaBuilder;
+
+bool applySchemaV2();
 
 void onToggle(std::string_view, bool enabled) {
     CameraOverhaulModule::get().setEnabled(enabled);
@@ -69,8 +81,19 @@ void onConfigChanged(std::string_view, std::string_view key, std::string_view va
         }
     }
 
+    // Accept every spelling the launcher can hand us ("bodycam", "Bodycam",
+    // "body_cam", ...) by routing the preset through the one parser.
+    if (safeKey == "headBobMode" && !safeValue.empty()) {
+        j["headBobMode"] = modeName(CameraOverhaulModule::parseHeadBobMode(safeValue));
+    }
+
     mod.loadConfig(j);
     cameraoverhaul::config::ConfigManager::get().save();
+
+    // Re-publish with the module's own state after a preset change: the
+    // launcher's chips read current_value from the schema, and it only learns
+    // about a change if the revision moves. Discrete tap, so this is cheap.
+    if (safeKey == "headBobMode") (void)applySchemaV2();
 }
 
 std::string f(float value) {
@@ -107,14 +130,8 @@ std::map<std::string, std::string> configSnapshot() {
     return values;
 }
 
-const std::map<std::string, std::string>& liveValues() {
-    static const std::map<std::string, std::string> values = configSnapshot();
-    return values;
-}
-
-void bindLiveValue(ConfigNodeV2& node) {
+void bindLiveValue(ConfigNodeV2& node, const std::map<std::string, std::string>& values) {
     if (node.key.empty()) return;
-    const auto& values = liveValues();
     auto it = values.find(node.key);
     if (it == values.end()) return;
     node.currentValue = it->second;
@@ -124,13 +141,14 @@ void bindLiveValue(ConfigNodeV2& node) {
 
 ConfigNodeV2 makeNode(std::string id, std::string key, std::string category, std::string title,
                       ConfigControlTypeV2 type) {
+    static const std::map<std::string, std::string> values = configSnapshot();
     ConfigNodeV2 node;
     node.id = std::move(id);
     node.key = std::move(key);
     node.category = std::move(category);
     node.title = std::move(title);
     node.type = type;
-    bindLiveValue(node);
+    bindLiveValue(node, values);
     return node;
 }
 
@@ -210,24 +228,17 @@ std::string buildSchemaJson() {
             ConfigOptionV2{.value = "comfort", .label = "Comfort", .description = "Soft bob, camera motion cut in half or off"},
             ConfigOptionV2{.value = "custom", .label = "Custom", .description = "Your own strength and rhythm sliders"},
     };
-    preset.currentValue = [&mod = CameraOverhaulModule::get()] {
-        switch (mod.m_headBobModeKind) {
-            case CameraOverhaulModule::HeadBobMode::Bodycam: return std::string("bodycam");
-            case CameraOverhaulModule::HeadBobMode::Comfort: return std::string("comfort");
-            case CameraOverhaulModule::HeadBobMode::Custom:  return std::string("custom");
-            case CameraOverhaulModule::HeadBobMode::Default:
-            default:                                          return std::string("default");
-        }
-    }();
+    preset.currentValue = modeName(CameraOverhaulModule::get().m_headBobModeKind);
     preset.hasCurrentValue = true;
-    preset.defaultValue = "bodycam";
+    preset.defaultValue = "default";
     schema.node(std::move(preset));
 
     schema.node(info("info_preset", "profile", "What a preset changes",
                      "Presets scale the head bob and the cinematic camera motion (pitch, roll, "
                      "idle sway) together, so Bodycam really feels like a chest-mounted camera "
-                     "and Comfort really calms the whole view. Turn the switch below off if you "
-                     "want the Camera Motion sliders to apply unscaled to every preset."));
+                     "and Comfort really calms the whole view. Reading the module right now: " +
+                             modeName(CameraOverhaulModule::get().m_headBobModeKind) +
+                             "."));
 
     auto scaleMotion = toggle("presetScalesCameraMotion", "presetScalesCameraMotion", "profile",
                               "Preset scales camera motion",
@@ -421,6 +432,7 @@ bool applySchemaV2() {
 
 void registerWithLauncher() {
     auto& mod = CameraOverhaulModule::get();
+    const bool hasSchemaApi = (&pl::modmenu::setConfigSchemaJson != nullptr);
 
     pl::modmenu::ModuleBuilder builder{std::string(CameraOverhaulModule::moduleId),
                                        std::string(CameraOverhaulModule::name)};
@@ -472,7 +484,13 @@ void registerWithLauncher() {
     // pl::modmenu::ModuleBuilder::config takes at most 7 arguments in every
     // released preloader, so the inline option list cannot be expressed here;
     // the preset choice is driven by the V2 schema (or config.json headBobMode).
-    builder.config("headBobMode", "Head Bob Mode", ConfigType::Radio, mod.m_headBobMode);
+    // Only preloaders without the V2 schema need the flat preset entry: its radio
+    // sends free text, which is what used to poison config.json and reset
+    // everything on the next launch.
+    if (!hasSchemaApi) {
+        builder.config("headBobMode", "Head Bob Mode", ConfigType::Radio,
+                       modeName(mod.m_headBobModeKind));
+    }
     builder.config("headBobStrength", "Head Bob Strength", ConfigType::SliderFloat,
                    f(mod.m_headBobStrength), "0.0", "3.0", "enableHeadBob");
     builder.config("headBobStepRate", "Step Rate (Custom preset)", ConfigType::SliderFloat,

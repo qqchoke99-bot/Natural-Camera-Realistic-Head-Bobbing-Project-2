@@ -61,8 +61,8 @@ public:
 
     // --- realistic step head-bob ---
     bool        m_enableHeadBob = true;
-    std::string m_headBobMode = "bodycam"; // default | bodycam | comfort | custom
-    HeadBobMode m_headBobModeKind = HeadBobMode::Bodycam;
+    std::string m_headBobMode = "default"; // default | bodycam | comfort | custom
+    HeadBobMode m_headBobModeKind = HeadBobMode::Default;
     float       m_headBobStrength = 1.0f;
     float       m_headBobStepRate = 1.0f;
     float       m_headBobSmoothHz = 1.75f;

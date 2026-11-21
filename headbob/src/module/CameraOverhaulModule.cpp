@@ -9,6 +9,8 @@
 #include <cameraoverhaul/sdk/world/Actor.hpp>
 
 #include <chrono>
+#include <cstdlib>
+#include <string>
 #include <cmath>
 #include <cstdint>
 
@@ -144,6 +146,44 @@ struct CameraState {
 };
 
 CameraState g_state;
+
+// One malformed or stale value in config.json must not throw away the rest of
+// the file - that used to reset every setting (including the preset) to its
+// built-in default on the next launch.
+template <typename T>
+void readBool(const nlohmann::json& j, const char* key, T& out) {
+    if (!j.contains(key)) return;
+    const auto& value = j[key];
+    if (value.is_boolean()) {
+        out = value.get<bool>();
+    } else if (value.is_number()) {
+        out = value.get<double>() != 0.0;
+    } else if (value.is_string()) {
+        const std::string text = value.get<std::string>();
+        out = (text == "true" || text == "1");
+    }
+}
+
+template <typename T>
+void readFloat(const nlohmann::json& j, const char* key, T& out) {
+    if (!j.contains(key)) return;
+    const auto& value = j[key];
+    if (value.is_number()) {
+        out = value.get<float>();
+    } else if (value.is_string()) {
+        char* end = nullptr;
+        const std::string text = value.get<std::string>();
+        const float parsed = std::strtof(text.c_str(), &end);
+        if (end != text.c_str()) out = parsed;
+    }
+}
+
+inline void readMode(const nlohmann::json& j, const char* key, std::string& out,
+                     CameraOverhaulModule::HeadBobMode& kind) {
+    if (!j.contains(key) || !j[key].is_string()) return;
+    out = j[key].get<std::string>();
+    kind = CameraOverhaulModule::parseHeadBobMode(out);
+}
 
 
 float springDamper(float& out, float& vel, float target, float dt, float hz, float damp) {
@@ -435,50 +475,55 @@ float CameraOverhaulModule::cameraMotionGain() const {
 }
 
 void CameraOverhaulModule::loadConfig(const nlohmann::json& j) {
-    if (j.contains("enabled")) {
-        const bool state = j["enabled"].get<bool>();
-        if (state != m_enabled) setEnabled(state);
-    }
-    if (j.contains("enablePitch"))             m_enablePitch             = j["enablePitch"].get<bool>();
-    if (j.contains("forwardPitchIntensity"))   m_forwardPitchIntensity   = j["forwardPitchIntensity"].get<float>();
-    if (j.contains("forwardPitchSmoothing"))   m_forwardPitchSmoothing   = j["forwardPitchSmoothing"].get<float>();
-    if (j.contains("verticalPitchIntensity"))  m_verticalPitchIntensity  = j["verticalPitchIntensity"].get<float>();
-    if (j.contains("verticalPitchSmoothing"))  m_verticalPitchSmoothing  = j["verticalPitchSmoothing"].get<float>();
-    if (j.contains("enableRoll"))              m_enableRoll              = j["enableRoll"].get<bool>();
-    if (j.contains("turningRollIntensity"))    m_turningRollIntensity    = j["turningRollIntensity"].get<float>();
-    if (j.contains("turningRollAccumulation")) m_turningRollAccumulation = j["turningRollAccumulation"].get<float>();
-    if (j.contains("turningRollSmoothing"))    m_turningRollSmoothing    = j["turningRollSmoothing"].get<float>();
-    if (j.contains("strafingRollIntensity"))   m_strafingRollIntensity   = j["strafingRollIntensity"].get<float>();
-    if (j.contains("enableSway"))              m_enableSway              = j["enableSway"].get<bool>();
-    if (j.contains("swayIntensity"))           m_swayIntensity           = j["swayIntensity"].get<float>();
-    if (j.contains("swayFrequency"))           m_swayFrequency           = j["swayFrequency"].get<float>();
-    if (j.contains("swayFadeInDelay"))         m_swayFadeInDelay         = j["swayFadeInDelay"].get<float>();
-    if (j.contains("swayFadeInLength"))        m_swayFadeInLength        = j["swayFadeInLength"].get<float>();
-    if (j.contains("swayFadeOutLength"))       m_swayFadeOutLength       = j["swayFadeOutLength"].get<float>();
-    if (j.contains("transitionSmoothing"))     m_transitionSmoothing     = j["transitionSmoothing"].get<float>();
+    readBool(j, "enabled", m_enabled);
+    readBool(j, "enablePitch", m_enablePitch);
+    readFloat(j, "forwardPitchIntensity", m_forwardPitchIntensity);
+    readFloat(j, "forwardPitchSmoothing", m_forwardPitchSmoothing);
+    readFloat(j, "verticalPitchIntensity", m_verticalPitchIntensity);
+    readFloat(j, "verticalPitchSmoothing", m_verticalPitchSmoothing);
+    readBool(j, "enableRoll", m_enableRoll);
+    readFloat(j, "turningRollIntensity", m_turningRollIntensity);
+    readFloat(j, "turningRollAccumulation", m_turningRollAccumulation);
+    readFloat(j, "turningRollSmoothing", m_turningRollSmoothing);
+    readFloat(j, "strafingRollIntensity", m_strafingRollIntensity);
+    readBool(j, "enableSway", m_enableSway);
+    readFloat(j, "swayIntensity", m_swayIntensity);
+    readFloat(j, "swayFrequency", m_swayFrequency);
+    readFloat(j, "swayFadeInDelay", m_swayFadeInDelay);
+    readFloat(j, "swayFadeInLength", m_swayFadeInLength);
+    readFloat(j, "swayFadeOutLength", m_swayFadeOutLength);
+    readFloat(j, "transitionSmoothing", m_transitionSmoothing);
 
-    if (j.contains("enableHeadBob"))     m_enableHeadBob     = j["enableHeadBob"].get<bool>();
-    if (j.contains("headBobMode")) {
-        m_headBobMode = j["headBobMode"].get<std::string>();
-        m_headBobModeKind = parseHeadBobMode(m_headBobMode);
-    }
-    if (j.contains("headBobStrength"))   m_headBobStrength   = j["headBobStrength"].get<float>();
-    if (j.contains("headBobStepRate"))   m_headBobStepRate   = j["headBobStepRate"].get<float>();
-    if (j.contains("headBobSmoothHz"))   m_headBobSmoothHz   = j["headBobSmoothHz"].get<float>();
-    if (j.contains("headBobDamping"))    m_headBobDamping    = j["headBobDamping"].get<float>();
+    readBool(j, "enableHeadBob", m_enableHeadBob);
+    readMode(j, "headBobMode", m_headBobMode, m_headBobModeKind);
+    readFloat(j, "headBobStrength", m_headBobStrength);
+    readFloat(j, "headBobStepRate", m_headBobStepRate);
+    readFloat(j, "headBobSmoothHz", m_headBobSmoothHz);
+    readFloat(j, "headBobDamping", m_headBobDamping);
 
-    if (j.contains("headBobStrengthDefault")) m_headBobStrengthDefault = j["headBobStrengthDefault"].get<float>();
-    if (j.contains("headBobStrengthBodycam")) m_headBobStrengthBodycam = j["headBobStrengthBodycam"].get<float>();
-    if (j.contains("headBobStrengthComfort")) m_headBobStrengthComfort = j["headBobStrengthComfort"].get<float>();
-    if (j.contains("headBobStrengthCustom"))  m_headBobStrengthCustom  = j["headBobStrengthCustom"].get<float>();
+    readFloat(j, "headBobStrengthDefault", m_headBobStrengthDefault);
+    readFloat(j, "headBobStrengthBodycam", m_headBobStrengthBodycam);
+    readFloat(j, "headBobStrengthComfort", m_headBobStrengthComfort);
+    readFloat(j, "headBobStrengthCustom", m_headBobStrengthCustom);
 
-    if (j.contains("presetScalesCameraMotion")) m_presetScalesCameraMotion = j["presetScalesCameraMotion"].get<bool>();
-    if (j.contains("cameraMotionDefault")) m_cameraMotionDefault = j["cameraMotionDefault"].get<float>();
-    if (j.contains("cameraMotionBodycam")) m_cameraMotionBodycam = j["cameraMotionBodycam"].get<float>();
-    if (j.contains("cameraMotionComfort")) m_cameraMotionComfort = j["cameraMotionComfort"].get<float>();
-    if (j.contains("cameraMotionCustom"))  m_cameraMotionCustom  = j["cameraMotionCustom"].get<float>();
+    readBool(j, "presetScalesCameraMotion", m_presetScalesCameraMotion);
+    readFloat(j, "cameraMotionDefault", m_cameraMotionDefault);
+    readFloat(j, "cameraMotionBodycam", m_cameraMotionBodycam);
+    readFloat(j, "cameraMotionComfort", m_cameraMotionComfort);
+    readFloat(j, "cameraMotionCustom", m_cameraMotionCustom);
+
+    // The parsed mode is the source of truth: keep the stored string in sync so
+    // the flat (V1) menu can never show a preset the module is not using.
+    m_headBobMode = [this] {
+        switch (m_headBobModeKind) {
+            case HeadBobMode::Bodycam: return std::string("bodycam");
+            case HeadBobMode::Comfort: return std::string("comfort");
+            case HeadBobMode::Custom:  return std::string("custom");
+            case HeadBobMode::Default:
+            default:                   return std::string("default");
+        }
+    }();
 }
-
 
 void CameraOverhaulModule::saveConfig(nlohmann::json& j) {
     j["enabled"]                 = m_enabled;

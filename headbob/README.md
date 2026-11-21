@@ -28,6 +28,32 @@ declared **weak** here: on a preloader that does not export it the symbol
 resolves to null, the call is skipped, and the mod keeps working on the flat V1
 entry list. Nothing fails to load either way.
 
+## Defaults and persistence
+
+`headBobMode` defaults to **`default`**. The preset is stored in the mod's
+`config.json` and is reloaded on every launch, so it survives restarts.
+
+Two things used to make it snap back to Bodycam, both fixed in 2.3.1:
+
+1. **One bad value threw the whole file away.** `loadConfig` read every key with
+   a strict `get<T>()`, and `ConfigManager::load` swallowed the exception - so a
+   single malformed key (an empty string from a text/radio entry, a key whose
+   type changed between versions) aborted the parse and every setting, preset
+   included, silently reverted to its built-in default. Values are now read
+   leniently: a key that cannot be parsed keeps its previous value and the rest
+   of the file still applies.
+2. **The flat menu entry for the preset was a free-text radio.** It could write
+   anything into `headBobMode` (`Bodycam`, an empty string, a half-typed word).
+   That entry is now only registered on preloaders without the V2 schema; on
+   current preloaders the preset exists solely as the schema choice, whose
+   values are fixed. The mod also normalises whatever it receives through the
+   single mode parser, so `bodycam`, `Bodycam` and the like all land as
+   `bodycam`.
+
+The applied preset is also re-published to the menu whenever it changes, so the
+chips and the module cannot drift apart, and the Preset tab's info card prints
+the preset the module is actually running.
+
 ## Preset strengths
 
 Every preset carries its own strength, so switching preset changes the bob
@@ -123,7 +149,7 @@ Built on the **CameraOverhaul** hook path, pinned to 1.26.62.
 
 ## Features
 
-- **Step head-bob** (modes: default / bodycam / comfort / custom)
+- **Step head-bob** (modes: default / bodycam / comfort / custom, default = `default`)
 - Original cinematic pitch / roll / idle sway
 
 ## Install
