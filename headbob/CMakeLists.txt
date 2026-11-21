@@ -51,6 +51,10 @@ target_compile_definitions(${MOD_LIBRARY_NAME} PRIVATE HEADBOB_PROFILE_INDEX=${H
 target_link_libraries(${MOD_LIBRARY_NAME} PRIVATE preloader)
 
 if(ANDROID)
+    # pl::log::Logger goes through __android_log_print; the preloader links log
+    # privately, so the mod has to pull it in itself.
+    find_library(android_log_lib log REQUIRED)
+    target_link_libraries(${MOD_LIBRARY_NAME} PRIVATE ${android_log_lib})
     target_compile_options(${MOD_LIBRARY_NAME} PRIVATE -fPIC -fvisibility=hidden)
     target_link_options(${MOD_LIBRARY_NAME} PRIVATE -Wl,-z,max-page-size=16384)
 endif()
