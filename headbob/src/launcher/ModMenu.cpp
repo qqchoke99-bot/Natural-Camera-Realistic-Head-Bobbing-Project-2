@@ -6,7 +6,9 @@
 #include <pl/ModMenu.hpp>
 #include <pl/ModMenuConfig.hpp>
 
+#include <cstdio>
 #include <cstdlib>
+#include <map>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -81,6 +83,45 @@ std::string b(bool value) {
 
 // ---------------------------------------------------------------- V2 schema --
 
+// Snapshot of the live config, so every schema node carries its real current
+// value. Without it the launcher only knows the values it captured when the
+// module registered, and a stale/blank value can hide visible_when sections.
+std::map<std::string, std::string> configSnapshot() {
+    std::map<std::string, std::string> values;
+    nlohmann::json j;
+    CameraOverhaulModule::get().saveConfig(j);
+    for (auto it = j.begin(); it != j.end(); ++it) {
+        const auto& value = it.value();
+        if (value.is_boolean()) {
+            values[it.key()] = value.get<bool>() ? "true" : "false";
+        } else if (value.is_number_float()) {
+            char buffer[32];
+            std::snprintf(buffer, sizeof(buffer), "%g", static_cast<double>(value.get<float>()));
+            values[it.key()] = buffer;
+        } else if (value.is_number_integer()) {
+            values[it.key()] = std::to_string(value.get<long long>());
+        } else if (value.is_string()) {
+            values[it.key()] = value.get<std::string>();
+        }
+    }
+    return values;
+}
+
+const std::map<std::string, std::string>& liveValues() {
+    static const std::map<std::string, std::string> values = configSnapshot();
+    return values;
+}
+
+void bindLiveValue(ConfigNodeV2& node) {
+    if (node.key.empty()) return;
+    const auto& values = liveValues();
+    auto it = values.find(node.key);
+    if (it == values.end()) return;
+    node.currentValue = it->second;
+    node.hasCurrentValue = true;
+    if (node.defaultValue.empty()) node.defaultValue = it->second;
+}
+
 ConfigNodeV2 makeNode(std::string id, std::string key, std::string category, std::string title,
                       ConfigControlTypeV2 type) {
     ConfigNodeV2 node;
@@ -89,6 +130,7 @@ ConfigNodeV2 makeNode(std::string id, std::string key, std::string category, std
     node.category = std::move(category);
     node.title = std::move(title);
     node.type = type;
+    bindLiveValue(node);
     return node;
 }
 
@@ -131,6 +173,11 @@ void greyOutUnless(ConfigNodeV2& node, std::string key, std::string value) {
                                                  std::move(value)});
 }
 
+void visibleOnlyFor(ConfigNodeV2& node, std::string value) {
+    node.visibleWhen.push_back(ConfigConditionV2{"headBobMode", ConfigConditionOpV2::Equals,
+                                                 std::move(value)});
+}
+
 void greyOutWithout(ConfigNodeV2& node, std::string key) {
     node.enabledWhen.push_back(ConfigConditionV2{std::move(key), ConfigConditionOpV2::Truthy, {}});
 }
@@ -143,7 +190,7 @@ std::string buildSchemaJson() {
           .category("headbob", "Head Bob",
                     "Tune the step rhythm that sits under every preset.")
           .category("camera", "Camera Motion",
-                    "Cinematic pitch, roll and idle sway.")
+                    "Base amounts for pitch, roll and idle sway. The active preset scales them.")
           .category("advanced", "Advanced",
                     "Global smoothing and file locations.")
           .defaultCategory("profile");
@@ -154,43 +201,85 @@ std::string buildSchemaJson() {
     auto preset = makeNode("headBobMode", "headBobMode", "profile", "Preset",
                            ConfigControlTypeV2::Choice);
     preset.description =
-            "Default, Bodycam and Comfort are fixed recipes (only their strength is editable). "
-            "Custom applies the tuning sliders you set yourself.";
+            "A preset is a whole-camera profile: bob strength, step rhythm and how much the "
+            "camera reacts while you move. Only the active preset's controls are shown below.";
     preset.choiceStyle = ConfigChoiceStyleV2::Segmented;
     preset.options = {
-            ConfigOptionV2{.value = "default", .label = "Default", .description = "Neutral walking bob"},
-            ConfigOptionV2{.value = "bodycam", .label = "Bodycam", .description = "Pronounced, camera-on-chest feel"},
-            ConfigOptionV2{.value = "comfort", .label = "Comfort", .description = "Reduced motion, easy on the eyes"},
-            ConfigOptionV2{.value = "custom", .label = "Custom", .description = "Uses the strength below and your own tuning"},
+            ConfigOptionV2{.value = "default", .label = "Default", .description = "Neutral walking bob and gentle camera motion"},
+            ConfigOptionV2{.value = "bodycam", .label = "Bodycam", .description = "Strong bob, heavy pitching and hard banking"},
+            ConfigOptionV2{.value = "comfort", .label = "Comfort", .description = "Soft bob, camera motion cut in half or off"},
+            ConfigOptionV2{.value = "custom", .label = "Custom", .description = "Your own strength and rhythm sliders"},
     };
+    preset.currentValue = [&mod = CameraOverhaulModule::get()] {
+        switch (mod.m_headBobModeKind) {
+            case CameraOverhaulModule::HeadBobMode::Bodycam: return std::string("bodycam");
+            case CameraOverhaulModule::HeadBobMode::Comfort: return std::string("comfort");
+            case CameraOverhaulModule::HeadBobMode::Custom:  return std::string("custom");
+            case CameraOverhaulModule::HeadBobMode::Default:
+            default:                                          return std::string("default");
+        }
+    }();
+    preset.hasCurrentValue = true;
+    preset.defaultValue = "bodycam";
     schema.node(std::move(preset));
 
-    schema.node(section("sec_strength", "profile", "Strength per preset"));
+    schema.node(info("info_preset", "profile", "What a preset changes",
+                     "Presets scale the head bob and the cinematic camera motion (pitch, roll, "
+                     "idle sway) together, so Bodycam really feels like a chest-mounted camera "
+                     "and Comfort really calms the whole view. Turn the switch below off if you "
+                     "want the Camera Motion sliders to apply unscaled to every preset."));
 
-    auto strengthDefault = slider("headBobStrengthDefault", "headBobStrengthDefault", "profile",
-                                  "Default strength",
-                                  "Applied while the Default preset is active. The rest of the "
-                                  "Default recipe is fixed.",
-                                  "0.0", "3.0", "0.05", "x");
-    auto strengthBodycam = slider("headBobStrengthBodycam", "headBobStrengthBodycam", "profile",
-                                  "Bodycam strength",
-                                  "Applied while the Bodycam preset is active. The rest of its "
-                                  "recipe is fixed.",
-                                  "0.0", "3.0", "0.05", "x");
-    auto strengthComfort = slider("headBobStrengthComfort", "headBobStrengthComfort", "profile",
-                                  "Comfort strength",
-                                  "Applied while the Comfort preset is active. The rest of its "
-                                  "recipe is fixed.",
-                                  "0.0", "3.0", "0.05", "x");
-    auto strengthCustom = slider("headBobStrengthCustom", "headBobStrengthCustom", "profile",
-                                 "Custom strength",
-                                 "Applied while the Custom preset is active, on top of the "
-                                 "tuning sliders below.",
-                                 "0.0", "3.0", "0.05", "x");
-    schema.node(std::move(strengthDefault));
-    schema.node(std::move(strengthBodycam));
-    schema.node(std::move(strengthComfort));
-    schema.node(std::move(strengthCustom));
+    auto scaleMotion = toggle("presetScalesCameraMotion", "presetScalesCameraMotion", "profile",
+                              "Preset scales camera motion",
+                              "On: each preset multiplies pitch, roll and idle sway by its own "
+                              "amount. Off: those sliders apply as written to every preset.");
+    schema.node(std::move(scaleMotion));
+
+    struct PresetControls {
+        const char* mode;
+        const char* strengthKey;
+        const char* motionKey;
+        const char* name;
+        const char* strengthId;
+        const char* motionId;
+        const char* strengthDefault;
+        const char* motionDefault;
+    };
+    const PresetControls presets[] = {
+            {"default", "headBobStrengthDefault", "cameraMotionDefault", "Default",
+             "headBobStrengthDefault", "cameraMotionDefault", "1.00", "1.00"},
+            {"bodycam", "headBobStrengthBodycam", "cameraMotionBodycam", "Bodycam",
+             "headBobStrengthBodycam", "cameraMotionBodycam", "1.15", "1.30"},
+            {"comfort", "headBobStrengthComfort", "cameraMotionComfort", "Comfort",
+             "headBobStrengthComfort", "cameraMotionComfort", "0.70", "0.50"},
+            {"custom", "headBobStrengthCustom", "cameraMotionCustom", "Custom",
+             "headBobStrengthCustom", "cameraMotionCustom", "1.00", "1.00"},
+    };
+
+    schema.node(section("sec_strength", "profile", "Strength"));
+    for (const auto& entry : presets) {
+        auto strength = slider(entry.strengthId, entry.strengthKey, "profile",
+                               std::string(entry.name) + " strength",
+                               std::string("How strong the bob is while ") + entry.name +
+                                       " is active, on top of Master strength.",
+                               "0.0", "3.0", "0.05", "x");
+        visibleOnlyFor(strength, entry.mode);
+        greyOutUnless(strength, "headBobMode", entry.mode);
+        schema.node(std::move(strength));
+    }
+
+    schema.node(section("sec_motion", "profile", "Camera motion"));
+    for (const auto& entry : presets) {
+        auto motion = slider(entry.motionId, entry.motionKey, "profile",
+                             std::string(entry.name) + " camera motion",
+                             std::string("Pitch, roll and idle sway multiplier while ") + entry.name +
+                                     " is active (1.00 keeps the Camera Motion values as written).",
+                             "0.0", "3.0", "0.05", "x");
+        visibleOnlyFor(motion, entry.mode);
+        greyOutUnless(motion, "headBobMode", entry.mode);
+        greyOutWithout(motion, "presetScalesCameraMotion");
+        schema.node(std::move(motion));
+    }
 
     // --- Head bob -------------------------------------------------------
     schema.node(section("sec_bob", "headbob", "Step bob"));
@@ -209,7 +298,8 @@ std::string buildSchemaJson() {
     schema.node(info("info_custom", "headbob", "Custom preset only",
                      "These three sliders are read by the Custom preset. Default, Bodycam and "
                      "Comfort keep their own baked-in rhythm, so they stay consistent no matter "
-                     "what you set here - switch the preset to Custom to feel the difference."));
+                     "what you set here - switch the preset to Custom to feel the difference. "
+                     "The Camera Motion sliders below apply to every preset, scaled by it."));
 
     auto stepRate = slider("headBobStepRate", "headBobStepRate", "headbob", "Step rate",
                            "How fast the step cycle runs while you walk.",
@@ -400,6 +490,17 @@ void registerWithLauncher() {
                    f(mod.m_headBobStrengthComfort), "0.0", "3.0", "enableHeadBob");
     builder.config("headBobStrengthCustom", "Custom Preset Strength", ConfigType::SliderFloat,
                    f(mod.m_headBobStrengthCustom), "0.0", "3.0", "enableHeadBob");
+
+    builder.config("presetScalesCameraMotion", "Preset Scales Camera Motion", ConfigType::Toggle,
+                   b(mod.m_presetScalesCameraMotion));
+    builder.config("cameraMotionDefault", "Default Preset Camera Motion", ConfigType::SliderFloat,
+                   f(mod.m_cameraMotionDefault), "0.0", "3.0");
+    builder.config("cameraMotionBodycam", "Bodycam Preset Camera Motion", ConfigType::SliderFloat,
+                   f(mod.m_cameraMotionBodycam), "0.0", "3.0");
+    builder.config("cameraMotionComfort", "Comfort Preset Camera Motion", ConfigType::SliderFloat,
+                   f(mod.m_cameraMotionComfort), "0.0", "3.0");
+    builder.config("cameraMotionCustom", "Custom Preset Camera Motion", ConfigType::SliderFloat,
+                   f(mod.m_cameraMotionCustom), "0.0", "3.0");
 
     if (!builder.registerModule()) return;
 

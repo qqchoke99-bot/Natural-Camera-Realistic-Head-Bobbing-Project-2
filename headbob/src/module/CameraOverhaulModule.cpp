@@ -237,17 +237,22 @@ void CameraOverhaulModule::applyToCamera(void* cameraComponent) {
     float yawBias = 0.0f;
     float rollBias = 0.0f;
 
+    // Preset profile: one gain on the whole cinematic layer (the bob has its
+    // own recipe). Springs are linear, so scaling here matches scaling the
+    // targets inside onTick and costs no extra work.
+    const float camGain = cameraMotionGain();
+
     if (m_enablePitch) {
-        pitchBias += (g_state.pitchVertical.value + g_state.pitchForward.value) * kDeg2Rad;
+        pitchBias += (g_state.pitchVertical.value + g_state.pitchForward.value) * camGain * kDeg2Rad;
     }
     if (m_enableRoll) {
-        rollBias += g_state.roll.value * kDeg2Rad;
+        rollBias += g_state.roll.value * camGain * kDeg2Rad;
     }
 
     if (m_enableSway && m_swayIntensity > 0.0f && g_state.swayFade > 0.0f) {
         const float t = static_cast<float>(now);
         const float freq = m_swayFrequency;
-        const float amp = m_swayIntensity * g_state.swayFade;
+        const float amp = m_swayIntensity * camGain * g_state.swayFade;
         const float f = amp * amp * amp;
         pitchBias += noise1D(t * freq, 420) * f * 0.35f * kDeg2Rad;
         yawBias   += noise1D(t * freq, 1337) * f * 0.35f * kDeg2Rad;
@@ -418,6 +423,17 @@ CameraOverhaulModule::HeadBobRecipe CameraOverhaulModule::headBobRecipe() const 
     }
 }
 
+float CameraOverhaulModule::cameraMotionGain() const {
+    if (!m_presetScalesCameraMotion) return 1.0f;
+    switch (m_headBobModeKind) {
+        case HeadBobMode::Bodycam: return clampf(m_cameraMotionBodycam, 0.0f, 3.0f);
+        case HeadBobMode::Comfort: return clampf(m_cameraMotionComfort, 0.0f, 3.0f);
+        case HeadBobMode::Custom:  return clampf(m_cameraMotionCustom, 0.0f, 3.0f);
+        case HeadBobMode::Default:
+        default:                   return clampf(m_cameraMotionDefault, 0.0f, 3.0f);
+    }
+}
+
 void CameraOverhaulModule::loadConfig(const nlohmann::json& j) {
     if (j.contains("enabled")) {
         const bool state = j["enabled"].get<bool>();
@@ -455,6 +471,12 @@ void CameraOverhaulModule::loadConfig(const nlohmann::json& j) {
     if (j.contains("headBobStrengthBodycam")) m_headBobStrengthBodycam = j["headBobStrengthBodycam"].get<float>();
     if (j.contains("headBobStrengthComfort")) m_headBobStrengthComfort = j["headBobStrengthComfort"].get<float>();
     if (j.contains("headBobStrengthCustom"))  m_headBobStrengthCustom  = j["headBobStrengthCustom"].get<float>();
+
+    if (j.contains("presetScalesCameraMotion")) m_presetScalesCameraMotion = j["presetScalesCameraMotion"].get<bool>();
+    if (j.contains("cameraMotionDefault")) m_cameraMotionDefault = j["cameraMotionDefault"].get<float>();
+    if (j.contains("cameraMotionBodycam")) m_cameraMotionBodycam = j["cameraMotionBodycam"].get<float>();
+    if (j.contains("cameraMotionComfort")) m_cameraMotionComfort = j["cameraMotionComfort"].get<float>();
+    if (j.contains("cameraMotionCustom"))  m_cameraMotionCustom  = j["cameraMotionCustom"].get<float>();
 }
 
 
@@ -489,5 +511,11 @@ void CameraOverhaulModule::saveConfig(nlohmann::json& j) {
     j["headBobStrengthBodycam"] = m_headBobStrengthBodycam;
     j["headBobStrengthComfort"] = m_headBobStrengthComfort;
     j["headBobStrengthCustom"]  = m_headBobStrengthCustom;
+
+    j["presetScalesCameraMotion"] = m_presetScalesCameraMotion;
+    j["cameraMotionDefault"] = m_cameraMotionDefault;
+    j["cameraMotionBodycam"] = m_cameraMotionBodycam;
+    j["cameraMotionComfort"] = m_cameraMotionComfort;
+    j["cameraMotionCustom"]  = m_cameraMotionCustom;
 }
 

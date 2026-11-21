@@ -59,6 +59,24 @@ Only the strength column is editable for the three built-in presets, so they
 always feel the same. The step rate / spring / damping sliders are read by
 **Custom** alone and grey out in the menu unless Custom is selected.
 
+**A preset also scales the camera motion.** Pitch, roll and idle sway are
+cinematic reactions that were global before; each preset now multiplies them, so
+Bodycam banks harder and Comfort calms the whole view, not just the bob.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `presetScalesCameraMotion` | `true` | master switch for the whole feature |
+| `cameraMotionDefault` | 1.00 | pitch / roll / sway multiplier for Default |
+| `cameraMotionBodycam` | 1.30 | "... Bodycam - stronger pitching and banking |
+| `cameraMotionComfort` | 0.50 | "... Comfort - the view moves about half as much |
+| `cameraMotionCustom` | 1.00 | "... Custom - your Camera Motion sliders as written |
+
+Set `presetScalesCameraMotion` to `false` to get the old behaviour back: the
+Camera Motion sliders then apply unscaled to every preset. In the menu only the
+active preset's strength and camera-motion sliders are shown (the eight
+preset-scoped controls use `visible_when` on `headBobMode`), so the Preset tab
+stays short instead of listing sixteen sliders at once.
+
 ## Performance
 
 The mod is not CPU bound: the whole per-frame camera maths is about 18 ns on a

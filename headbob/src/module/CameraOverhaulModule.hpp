@@ -87,6 +87,17 @@ public:
 
     HeadBobRecipe headBobRecipe() const;
 
+    // A preset also scales the cinematic camera motion, so Default / Bodycam /
+    // Comfort / Custom differ in pitch, roll and idle sway - not just in bob.
+    bool  m_presetScalesCameraMotion = true;
+    float m_cameraMotionDefault = 1.00f;
+    float m_cameraMotionBodycam = 1.30f;
+    float m_cameraMotionComfort = 0.50f;
+    float m_cameraMotionCustom  = 1.00f;
+
+    // 1.0 when the toggle is off, so the sliders keep their authored values.
+    float cameraMotionGain() const;
+
 private:
     CameraOverhaulModule() = default;
 
