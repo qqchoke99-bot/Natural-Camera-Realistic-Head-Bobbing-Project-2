@@ -313,9 +313,11 @@ void RealisticHeadBobMod::onActorTick(void* actor) {
     mDeltaSpeed.store(deltaSpeed, std::memory_order_relaxed);
     mSpeed.store(mSmoothSpeed > 0.05f ? mSmoothSpeed : 0.f, std::memory_order_relaxed);
     mVerticalSpeed.store(mSmoothVy, std::memory_order_relaxed);
-    // Bedrock has no cheap onGround query here: treat "barely moving vertically"
-    // as grounded. Jump/fall produce a clear vertical speed within one tick.
-    mOnGround.store(std::fabs(mSmoothVy) < 0.8f, std::memory_order_relaxed);
+    // A grounded Bedrock actor still reports a small negative vertical delta
+    // every tick (gravity applied, then resolved by collision) - measured at
+    // about -1.6 b/s in game - so "vertical speed is zero" is the wrong test.
+    // Grounded means "not falling", and real falls pass -3 b/s within a tick.
+    mOnGround.store(mSmoothVy > -3.0f, std::memory_order_relaxed);
     // Walk ~4.3 b/s, sprint ~5.6 b/s.
     mSprinting.store(mSmoothSpeed > 5.0f, std::memory_order_relaxed);
     mHasSample.store(true, std::memory_order_relaxed);

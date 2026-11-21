@@ -43,6 +43,11 @@ public:
     float m_swayFadeInLength = 4.0f;
     float m_swayFadeOutLength = 1.0f;
 
+    bool  m_enableHeadBob = true;
+    float m_headBobIntensity = 1.0f;
+    float m_headBobStepDistance = 1.6f;
+    float m_headBobFadeLength = 0.35f;
+
     float m_transitionSmoothing = 1.0f;
 
 private:

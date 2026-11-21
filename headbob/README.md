@@ -1,5 +1,10 @@
 # Realistic Head Bob
 
+> **Superseded.** The step bob now lives inside CameraOverhaul (`enableHeadBob`,
+> on by default). This standalone package is kept for reference; running both
+> stacks two bob effects. The fix below is still applied so it is not left
+> broken on its own.
+
 FPS-style step head bob for Minecraft Bedrock on Android (LeviLauncher).
 Camera dips and sways in step with your walk cycle, springs back when you stop,
 and drifts gently while you stand still.

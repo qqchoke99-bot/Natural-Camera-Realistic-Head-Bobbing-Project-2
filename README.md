@@ -2,7 +2,8 @@
 
 Cinematic camera for Minecraft Bedrock on Android ([LeviLauncher](https://github.com/LiteLDev/LeviLaunchroid)).
 
-Pitch when you accelerate or fall, roll when you turn, sway when idle.
+Pitch when you accelerate or fall, roll when you turn, sway when idle, and dip
+in step with your walk cycle (realistic head bob).
 
 ## Install
 
@@ -26,7 +27,7 @@ Everything build-specific lives in one table:
 | Profile | Game build | Status |
 |---|---|---|
 | `1.26.50` | 1.26.50.1 | shipped and played |
-| `1.26.62` | 1.26.62.1 | shipped and played; verified in game (1.1.5-beta-1.26.62) |
+| `1.26.62` | 1.26.62.1 | shipped and played; 1.1.5-beta verified in game, 1.1.6-beta adds head bob |
 
 Scan result for the 1.26.62 library (342 MB, `aarch64`): both patterns match
 **exactly once**, `NormalTick` @ `0xAF5E7A0`, `CameraBlendSystemTick` @
@@ -97,7 +98,31 @@ xmake -y
 # -> build/android/arm64-v8a/release/CameraOverhaul-1.26.62.levipack
 ```
 
-## Realistic Head Bob (revived)
+## Head bob
+
+Realistic step bob, integrated into the camera path above: the camera dips on
+every footfall, sways side to side with the gait, and rolls slightly with it.
+Phase is driven by **distance travelled**, not by a timer, so the dips land on
+footsteps, speed up when you sprint, and stop dead when you stop - then settle
+back to the idle sway.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `enableHeadBob` | `true` | master switch for the step bob |
+| `headBobIntensity` | `1.0` | amplitude; `0.55 deg` pitch / `0.30 deg` yaw / `0.22 deg` roll at `1.0` |
+| `headBobStepDistance` | `1.6` | blocks per footstep; lower = faster bob |
+| `headBobFadeLength` | `0.35` | seconds to blend the bob in or out |
+
+It rides on `velocity.y` for the airborne test, with a threshold that accounts
+for Bedrock's grounded-actor residue (a standing actor still reports about
+`-1.6 b/s` of vertical delta every tick, because gravity is applied and then
+resolved by collision). That is why "on ground" cannot mean "vertical speed is
+zero" - getting that wrong is what keeps a bob silently faded out.
+
+Roll contribution obeys `enableRoll`; with roll disabled the bob is pitch and
+yaw only.
+
+## Realistic Head Bob (revived, superseded)
 
 `headbob/` holds the revived **Realistic Head Bob** mod (formerly
 [`qqchoke99-bot/1xmake.lua`](https://github.com/qqchoke99-bot/1xmake.lua) 1.0.0).
@@ -108,9 +133,9 @@ It ships on its own, per game build:
 | `realistic_headbob-1.26.62.levipack` | 1.26.62 (1.26.62.1) |
 | `realistic_headbob-1.26.50.levipack` | 1.26.50 (1.26.50.1) |
 
-Built by `.github/workflows/build-headbob.yml`; details in
-[`headbob/README.md`](headbob/README.md). The two mods are independent - either
-can be installed without the other, and both can run together.
+**Superseded by the head bob built into CameraOverhaul above.** The standalone
+mod is kept for reference only - do not run it alongside this one, the two bob
+effects would stack. Details in [`headbob/README.md`](headbob/README.md).
 
 ## License
 
