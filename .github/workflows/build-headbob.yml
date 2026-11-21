@@ -1,0 +1,65 @@
+name: Build Realistic Head Bob
+
+# The revived head-bob mod lives in headbob/ and is built per Minecraft build,
+# same policy as CameraOverhaul: one .levipack per game version.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "headbob/**"
+      - ".github/workflows/build-headbob.yml"
+  pull_request:
+    paths:
+      - "headbob/**"
+      - ".github/workflows/build-headbob.yml"
+  workflow_dispatch:
+    inputs:
+      mcver:
+        description: "Minecraft Bedrock version to build for"
+        required: false
+        default: "all"
+        type: choice
+        options:
+          - all
+          - "1.26.50"
+          - "1.26.62"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        mcver: ["1.26.50", "1.26.62"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: nttld/setup-ndk@v1
+        id: ndk
+        with:
+          ndk-version: r28c
+
+      - name: Configure ${{ matrix.mcver }}
+        if: github.event.inputs.mcver == '' || github.event.inputs.mcver == 'all' || github.event.inputs.mcver == matrix.mcver
+        env:
+          ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
+        run: |
+          cmake -S headbob -B build-headbob-${{ matrix.mcver }} \
+            -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake \
+            -DANDROID_ABI=arm64-v8a \
+            -DANDROID_PLATFORM=android-28 \
+            -DANDROID_STL=c++_shared \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DMCVER=${{ matrix.mcver }}
+
+      - name: Build and package ${{ matrix.mcver }}
+        if: github.event.inputs.mcver == '' || github.event.inputs.mcver == 'all' || github.event.inputs.mcver == matrix.mcver
+        run: cmake --build build-headbob-${{ matrix.mcver }} --target levi_package -j$(nproc)
+
+      - uses: actions/upload-artifact@v4
+        if: github.event.inputs.mcver == '' || github.event.inputs.mcver == 'all' || github.event.inputs.mcver == matrix.mcver
+        with:
+          name: realistic-headbob-${{ matrix.mcver }}
+          path: build-headbob-${{ matrix.mcver }}/realistic_headbob-${{ matrix.mcver }}.levipack
+          if-no-files-found: error
