@@ -1,0 +1,182 @@
+# Realistic Head Bob (v2.0.0)
+
+Step head-bob integrated into the cinematic camera, for Minecraft Bedrock on
+Android via LeviLauncher.
+
+**Build: 1.26.62.** This tree is the 2.0.0 sources pinned to game build
+1.26.62 - actor offsets `0x228` / `0x238`, signatures re-verified against that
+library (`CameraBlendSystemTick` `0x11EA58CC`, `NormalTick` `0xAF5E7A0`, one hit
+each; `python3 scripts/verify_signatures.py <libminecraftpe.so>` reproduces it).
+Other game builds need their own package: the offsets are compile-time
+constants, not runtime lookups.
+
+---
+
+## Menu UI (Mod Menu v2)
+
+The module registers with the preloader Mod Menu and then submits a **V2 config
+schema** (`pl::modmenu::setConfigSchemaJson`), which is the modern card layout:
+
+- four categories - **Preset**, **Head Bob**, **Camera Motion**, **Advanced**
+- a sectioned layout with titles and per-control descriptions
+- the preset as a **segmented** choice instead of a plain radio row
+- sliders with real ranges, steps and units (`x`, `Hz`, `s`)
+- controls that grey out when their feature toggle is off (`enabled_when`)
+
+The V2 schema API landed on preloader main after the `0.2.3` release, so it is
+declared **weak** here: on a preloader that does not export it the symbol
+resolves to null, the call is skipped, and the mod keeps working on the flat V1
+entry list. Nothing fails to load either way.
+
+## Defaults and persistence
+
+`headBobMode` defaults to **`default`**. The preset is stored in the mod's
+`config.json` and is reloaded on every launch, so it survives restarts.
+
+Two things used to make it snap back to Bodycam, both fixed in 2.3.1:
+
+1. **One bad value threw the whole file away.** `loadConfig` read every key with
+   a strict `get<T>()`, and `ConfigManager::load` swallowed the exception - so a
+   single malformed key (an empty string from a text/radio entry, a key whose
+   type changed between versions) aborted the parse and every setting, preset
+   included, silently reverted to its built-in default. Values are now read
+   leniently: a key that cannot be parsed keeps its previous value and the rest
+   of the file still applies.
+2. **The flat menu entry for the preset was a free-text radio.** It could write
+   anything into `headBobMode` (`Bodycam`, an empty string, a half-typed word).
+   That entry is now only registered on preloaders without the V2 schema; on
+   current preloaders the preset exists solely as the schema choice, whose
+   values are fixed. The mod also normalises whatever it receives through the
+   single mode parser, so `bodycam`, `Bodycam` and the like all land as
+   `bodycam`.
+
+The applied preset is also re-published to the menu whenever it changes, so the
+chips and the module cannot drift apart, and the Preset tab's info card prints
+the preset the module is actually running.
+
+## Preset strengths
+
+Every preset carries its own strength, so switching preset changes the bob
+without touching the master strength:
+
+| Key | Default | Meaning |
+|---|---|---|
+| `headBobStrengthDefault` | 1.00 | used while the Default preset is active |
+| `headBobStrengthBodycam` | 1.15 | used while Bodycam is active |
+| `headBobStrengthComfort` | 0.70 | used while Comfort is active |
+| `headBobStrengthCustom` | 1.00 | used while Custom is active |
+
+Effective gain is `headBobStrength` (master) x the active preset's strength. The
+defaults reproduce the old hard-coded 1.15 / 0.70 exactly, so existing configs
+look identical until you move a slider.
+
+**Presets are fixed recipes; Custom is the one you build.** Each preset resolves
+to a full recipe - strength, step amplitude, step rate, spring frequency,
+damping:
+
+| Preset | Strength | Step amp | Step rate | Spring Hz | Damping |
+|---|---|---|---|---|---|
+| Default | 1.00 | 1.00 | 1.00 | 1.75 | 1.25 |
+| Bodycam | 1.15 | 1.10 | 1.05 | 1.75 | 1.25 |
+| Comfort | 0.70 | 0.75 | 0.95 | 1.75 | 1.25 |
+| Custom | 1.00 | 1.00 | `headBobStepRate` | `headBobSmoothHz` | `headBobDamping` |
+
+Only the strength column is editable for the three built-in presets, so they
+always feel the same. The step rate / spring / damping sliders are read by
+**Custom** alone and grey out in the menu unless Custom is selected.
+
+**A preset also scales the camera motion.** Pitch, roll and idle sway are
+cinematic reactions that were global before; each preset now multiplies them, so
+Bodycam banks harder and Comfort calms the whole view, not just the bob.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `presetScalesCameraMotion` | `true` | master switch for the whole feature |
+| `cameraMotionDefault` | 1.00 | pitch / roll / sway multiplier for Default |
+| `cameraMotionBodycam` | 1.30 | "... Bodycam - stronger pitching and banking |
+| `cameraMotionComfort` | 0.50 | "... Comfort - the view moves about half as much |
+| `cameraMotionCustom` | 1.00 | "... Custom - your Camera Motion sliders as written |
+
+Set `presetScalesCameraMotion` to `false` to get the old behaviour back: the
+Camera Motion sliders then apply unscaled to every preset. In the menu only the
+active preset's strength and camera-motion sliders are shown (the eight
+preset-scoped controls use `visible_when` on `headBobMode`), so the Preset tab
+stays short instead of listing sixteen sliders at once.
+
+## Performance
+
+The mod is not CPU bound: the whole per-frame camera maths is about 18 ns on a
+host core (two springs + two sines), which is nothing against a frame budget. So
+this pass targets *jitter* - work the render thread should never do - rather
+than frame rate.
+
+| Change | Before | After | Effect |
+|---|---|---|---|
+| `EventBus::publish` with a listener | 30.3 ns, one heap allocation + `std::function` copy per publish | 2.4 ns, lock-free atomic load | removes allocator traffic from the tick path |
+| `EventBus::publish` with no listener | 21.9 ns (shared_mutex + hash lookup) | 0.6 ns | the eglSwapBuffers detour publishes `FrameEvent` every frame and nothing subscribes |
+| `headBobMode` check in the frame path | 3.1 ns, `std::string` vs literal, twice | 1.2 ns, cached enum | parsed once in `loadConfig` |
+| `-Oz` vs `-O2` for the target | 18.5 ns per frame | 18.2 ns | **not worth it** - kept `-Oz`; the cost is libm, not codegen |
+
+Measured with `eventbus`/`math` micro-benchmarks on the host; the publish numbers
+are per call, so at 20 ticks + 120 frames per second the saving is sub-microsecond
+per second. It is a correctness-of-design win (no allocation, no lock on the
+render thread), not a speedup you would feel.
+
+Publishing is now lock-free in the read direction: each event type holds an
+atomic pointer to an immutable listener list, rebuilt copy-on-write on
+subscribe/unsubscribe, with replaced lists kept alive so a publisher walking an
+old list never touches freed memory.
+
+## Changes from the supplied v2 tree
+
+Signatures are **not** among them: both patterns already match the 1.26.62
+library once each, so they are byte-for-byte as you wrote them.
+
+| File | Change | Why |
+|---|---|---|
+| `include/cameraoverhaul/sdk/offsets/World.hpp` | `0x208`/`0x218` -> `0x228`/`0x238` | the actor state vector and rotation moved in 1.26.62; with the old values the pointer lands on the wrong member |
+| `include/cameraoverhaul/Version.hpp` | `2.0.0-1.26.62`, description mentions 1.26.62 | version string feeds the manifest |
+| `levimod.json` | `2.0.0-1.26.62`, `minecraft_versions: ["1.26.62.1"]` | one package per build; the offsets are compile-time constants |
+| `src/launcher/ModMenu.cpp` | dropped the inline Radio option list from the `headBobMode` entry | `ModuleBuilder::config` takes at most 7 arguments in every released preloader - the 8-argument call never compiled |
+| `include/cameraoverhaul/events/EventBus.hpp` | lock-free, allocation-free publish | see Performance above |
+| `src/module/CameraOverhaulModule.{hpp,cpp}` | `headBobMode` parsed into an enum on config load | no `std::string` comparisons in the frame path |
+
+Everything else - the bob maths, the mode presets, the config keys, the
+cinematic pitch/roll/sway, the packaging script, the icon - is untouched.
+
+
+Built on the **CameraOverhaul** hook path, pinned to 1.26.62.
+
+## Features
+
+- **Step head-bob** (modes: default / bodycam / comfort / custom, default = `default`)
+- Original cinematic pitch / roll / idle sway
+
+## Install
+
+1. LeviLauncher  
+2. Import `RealisticHeadBob.levipack`  
+3. Minecraft **1.26.50** or **1.26.52** (same signature set as CO 1.26.50)
+
+## Config
+
+```text
+/sdcard/games/CameraOverhaul/config.json
+```
+(key group still `RealisticHeadBob` after rename)
+
+Or in-game Mod Menu if PL menu works on your Levi version.
+
+## Build
+
+```sh
+xmake f -y -p android -a arm64-v8a -m release --ndk=/path/to/ndk
+xmake -y
+```
+
+GitHub Actions: push → workflow Build → artifact `RealisticHeadBob.levipack`
+
+## Credits
+
+- Camera hooks / signatures: CameraOverhaul Bedrock (GPL-3.0)
+- Step bob: Realistic Head Bobbing style spring-damper

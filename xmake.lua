@@ -15,6 +15,16 @@ add_requires("preloader")
 add_requires("nlohmann_json v3.11.3")
 add_requires("fmt")
 
+-- One .levipack per Minecraft build. The chosen value pins the signature
+-- profile and the component offsets at compile time, so a package can never
+-- be loaded against a game version it was not prepared for.
+option("mcver")
+    set_default("1.26.62")
+    set_values("1.26.50", "1.26.62")
+    set_showmenu(true)
+    set_description("Minecraft Bedrock version this .levipack targets")
+option_end()
+
 target("CameraOverhaul")
     set_kind("shared")
     set_languages("c++20")
@@ -23,6 +33,9 @@ target("CameraOverhaul")
     add_includedirs("include", {public = true})
     add_includedirs("src")
     add_packages("preloader", "nlohmann_json", "fmt")
+
+    local mcver = get_config("mcver") or "1.26.62"
+    add_defines('CAMERAOVERHAUL_TARGET_VERSION="' .. mcver .. '"')
 
     if is_plat("android") then
         add_cxflags("-fPIC", "-Oz", "-ffunction-sections", "-fdata-sections", "-flto", "-fno-unwind-tables", "-fno-asynchronous-unwind-tables", "-fmerge-all-constants", "-fno-stack-protector", "-fexceptions", "-w", "-fvisibility=hidden")
@@ -48,7 +61,9 @@ target("CameraOverhaul")
         table.insert(args, path.join(os.projectdir(), "assets", "icon.png"))
         table.insert(args, "--version-header")
         table.insert(args, path.join(os.projectdir(), "include", "cameraoverhaul", "Version.hpp"))
+        table.insert(args, "--minecraft-version")
+        table.insert(args, mcver)
         table.insert(args, "--output")
-        table.insert(args, path.join(target:targetdir(), "CameraOverhaul.levipack"))
+        table.insert(args, path.join(target:targetdir(), "CameraOverhaul-" .. mcver .. ".levipack"))
         os.vrunv(python.program, args)
     end)

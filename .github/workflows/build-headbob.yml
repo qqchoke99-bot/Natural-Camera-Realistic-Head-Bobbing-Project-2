@@ -1,0 +1,108 @@
+name: Build Realistic Head Bob
+
+# standalone project in headbob/ (CameraOverhaul base + integrated step bob),
+# built with xmake exactly like its own repo.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "headbob/**"
+      - ".github/workflows/build-headbob.yml"
+  pull_request:
+    paths:
+      - "headbob/**"
+      - ".github/workflows/build-headbob.yml"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup xmake
+        uses: xmake-io/github-action-setup-xmake@v1
+
+      - uses: nttld/setup-ndk@v1
+        id: ndk
+        with:
+          ndk-version: r28c
+
+      - name: Build and package
+        id: build
+        continue-on-error: true
+        run: |
+          # -P: build headbob/ as its own project. Without it xmake finds this
+          # repository's root xmake.lua and builds CameraOverhaul instead.
+          set -o pipefail
+          xmake f -y -P headbob -p android -a arm64-v8a -m release --ndk=${{ steps.ndk.outputs.ndk-path }} 2>&1 | tee headbob/build-config.log
+          xmake -y -P headbob -v 2>&1 | tee headbob/build.log
+
+      # run logs live on storage some clients cannot reach, so republish the tail
+      # of the failure as an annotation (readable through the check-runs API).
+      - name: Report build failure
+        if: steps.build.outcome == 'failure'
+        run: |
+          python3 -c '
+          import pathlib, sys
+          text = ""
+          for name in ("headbob/build.log", "headbob/build-config.log"):
+              p = pathlib.Path(name)
+              if p.exists():
+                  text += p.read_text(errors="ignore")
+          lines = [l for l in (text.splitlines() if text else [])
+                   if ("error" in l.lower() or "undefined" in l.lower() or "fatal" in l.lower())
+                   and "clang++ -c" not in l]
+          tail = "\n".join(lines[-25:]) if lines else ("\n".join(text.splitlines()[-10:]) if text else "no log captured")
+          out = tail.replace("%", "%25").replace("\r", "").replace("\n", "%0A")
+          print("::error title=realistic head bob build::" + out)
+          '
+          exit 1
+
+      - name: Log tail
+        if: always()
+        run: |
+          python3 -c '
+          import pathlib
+          text = ""
+          for name in ("headbob/build-config.log", "headbob/build.log"):
+              p = pathlib.Path(name)
+              if p.exists():
+                  text += p.read_text(errors="ignore")
+          tail = "\n".join(text.splitlines()[-30:]) if text else "no logs"
+          print("::warning title=build tail::" + tail.replace("%", "%25").replace("\r", "").replace("\n", "%0A"))
+          '
+
+      # The V2 schema call is a *weak undefined* symbol on purpose: preloaders
+      # older than the V2 API must still load the mod. LTO + hidden visibility
+      # could in principle strip that reference, so prove it survives.
+      - name: Check schema symbol is weak-undefined
+        if: steps.build.outcome == 'success'
+        run: |
+          so=$(find . -name "libRealisticHeadBob.so" | head -1)
+          echo "library: $so"
+          nm_bin="${{ steps.ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-nm"
+          line=$("$nm_bin" -D --undefined-only "$so" | grep setConfigSchemaJson || true)
+          if [ -z "$line" ]; then
+            echo "::error title=v2 schema symbol::weak reference to setConfigSchemaJson missing - LTO stripped it"
+            exit 1
+          fi
+          echo "::warning title=v2 schema symbol::$line"
+          "$nm_bin" -D --undefined-only "$so" | grep -E "registerModule|setConfigSchemaJson" || true
+          ls -l "$so"
+
+      - name: Locate package
+        if: steps.build.outcome == 'success'
+        run: |
+          echo "--- levipack / so files ---"
+          find . -name "*.levipack" -o -name "libRealisticHeadBob.so" | head -20
+          echo "--- build tree ---"
+          ls -la headbob/build 2>/dev/null || true
+
+      - uses: actions/upload-artifact@v4
+        if: steps.build.outcome == 'success'
+        with:
+          name: RealisticHeadBob-1.26.62
+          path: "**/*.levipack"
+          if-no-files-found: error
